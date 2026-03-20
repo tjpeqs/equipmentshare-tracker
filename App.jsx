@@ -127,14 +127,14 @@ function getDay(bid) {
 }
 
 const STATUS_COLORS = {
-  "Not Contacted":         { bg:"#1a1a2e", border:"#334",    text:"#8888aa" },
+  "Not Contacted":         { bg:"#222222", border:"#2a2a2a",    text:"#8888aa" },
   "In Progress":           { bg:"#1a2a1a", border:"#2d4a2d", text:"#7aaa7a" },
   "Quoted":                { bg:"#1a1e2e", border:"#2d3566", text:"#7a88cc" },
   "Awarded — Contact Now": { bg:"#2a1800", border:"#cc6600", text:"#ffaa00" },
   "Won":                   { bg:"#0f2a1a", border:"#1a5c35", text:"#4dcc88" },
   "Lost":                  { bg:"#2a1a1a", border:"#5c2a2a", text:"#cc6666" },
 };
-const PRIORITY_COLORS = { High:"#e8401c", Medium:"#e8a21c", Low:"#5a8a6a" };
+const PRIORITY_COLORS = { High:"#FFD100", Medium:"#e8a21c", Low:"#5a8a6a" };
 
 function fmt$(v) { if(!v) return "—"; if(v>=1000000) return `$${(v/1000000).toFixed(1)}M`; return `$${(v/1000).toFixed(0)}K`; }
 function daysUntil(d) { if(!d) return null; return Math.ceil((new Date(d)-new Date())/86400000); }
@@ -163,37 +163,37 @@ function BidModal({ bid, onClose, onSave, saving }) {
   const isAwd=form.status==="Awarded — Contact Now";
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
-      <div style={{background:"#0e0e18",border:`1px solid ${isAwd?"#cc6600":"#2a2a44"}`,borderRadius:12,width:"100%",maxWidth:700,maxHeight:"92vh",overflowY:"auto",padding:32,position:"relative",boxShadow:isAwd?"0 0 40px rgba(204,102,0,0.2)":"none"}}>
+      <div style={{background:"#0e0e18",border:`1px solid ${isAwd?"#cc6600":"#333333"}`,borderRadius:12,width:"100%",maxWidth:700,maxHeight:"92vh",overflowY:"auto",padding:32,position:"relative",boxShadow:isAwd?"0 0 40px rgba(204,102,0,0.2)":"none"}}>
         <button onClick={onClose} style={{position:"absolute",top:16,right:20,background:"none",border:"none",color:"#666",fontSize:22,cursor:"pointer"}}>×</button>
         {isAwd&&<div style={{background:"#1a0d00",border:"1px solid #cc6600",borderRadius:8,padding:"12px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:18}}>🏆</span><div><div style={{color:"#ffaa00",fontWeight:700,fontSize:13}}>BID AWARDED — CONTACT NOW</div><div style={{color:"#aa7700",fontSize:12}}>Log the winning contractor and reach out immediately.</div></div></div>}
-        <h2 style={{color:"#e8e0d0",fontFamily:"'Bebas Neue',sans-serif",fontSize:26,marginBottom:24,letterSpacing:1}}>{bid?"EDIT PROJECT":"ADD NEW PROJECT"}</h2>
+        <h2 style={{color:"#F5F5F5",fontFamily:"'Bebas Neue',sans-serif",fontSize:26,marginBottom:24,letterSpacing:1}}>{bid?"EDIT PROJECT":"ADD NEW PROJECT"}</h2>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
           {[["Project Name","project","text","full"],["Property Owner","owner","text"],["General Contractor","gc","text"],["Est. Project Value ($)","value","number"],["Bid Date","bidDate","date"],["Award Date","awardDate","date"]].map(([label,key,type,span])=>(
             <div key={key} style={{gridColumn:span==="full"?"1 / -1":undefined}}>
               <label style={{color:"#888",fontSize:11,letterSpacing:1,display:"block",marginBottom:6,fontFamily:"monospace"}}>{label.toUpperCase()}</label>
-              <input type={type} value={form[key]||""} onChange={e=>set(key,e.target.value)} style={{width:"100%",background:"#13131f",border:"1px solid #2a2a44",borderRadius:6,color:"#e8e0d0",padding:"10px 12px",fontSize:14,outline:"none",boxSizing:"border-box"}}/>
+              <input type={type} value={form[key]||""} onChange={e=>set(key,e.target.value)} style={{width:"100%",background:"#1a1a1a",border:"1px solid #2a2a44",borderRadius:6,color:"#F5F5F5",padding:"10px 12px",fontSize:14,outline:"none",boxSizing:"border-box"}}/>
             </div>
           ))}
           <div style={{gridColumn:"1 / -1"}}>
             <label style={{color:isAwd?"#ffaa00":"#888",fontSize:11,letterSpacing:1,display:"block",marginBottom:6,fontFamily:"monospace"}}>AWARDED TO (WINNING CONTRACTOR) {isAwd&&"⚡"}</label>
-            <input type="text" value={form.awardedTo||""} onChange={e=>set("awardedTo",e.target.value)} placeholder={isAwd?"Enter winning GC name...":""} style={{width:"100%",background:isAwd?"#1a0d00":"#13131f",border:`1px solid ${isAwd?"#cc6600":"#2a2a44"}`,borderRadius:6,color:isAwd?"#ffcc44":"#e8e0d0",padding:"10px 12px",fontSize:14,outline:"none",boxSizing:"border-box"}}/>
+            <input type="text" value={form.awardedTo||""} onChange={e=>set("awardedTo",e.target.value)} placeholder={isAwd?"Enter winning GC name...":""} style={{width:"100%",background:isAwd?"#1a0d00":"#1a1a1a",border:`1px solid ${isAwd?"#cc6600":"#333333"}`,borderRadius:6,color:isAwd?"#ffcc44":"#F5F5F5",padding:"10px 12px",fontSize:14,outline:"none",boxSizing:"border-box"}}/>
           </div>
           {[["Town","town",TOWN_OPTIONS],["Project Type","type",TYPE_OPTIONS],["County","county",COUNTY_OPTIONS],["Status","status",STATUS_OPTIONS],["Priority","priority",PRIORITY_OPTIONS],["Lead Source","source",SOURCE_OPTIONS]].map(([label,key,opts])=>(
             <div key={key}>
               <label style={{color:"#888",fontSize:11,letterSpacing:1,display:"block",marginBottom:6,fontFamily:"monospace"}}>{label.toUpperCase()}</label>
-              <select value={form[key]} onChange={e=>set(key,e.target.value)} style={{width:"100%",background:"#13131f",border:"1px solid #2a2a44",borderRadius:6,color:"#e8e0d0",padding:"10px 12px",fontSize:14,outline:"none"}}>
+              <select value={form[key]} onChange={e=>set(key,e.target.value)} style={{width:"100%",background:"#1a1a1a",border:"1px solid #2a2a44",borderRadius:6,color:"#F5F5F5",padding:"10px 12px",fontSize:14,outline:"none"}}>
                 {opts.map(o=><option key={o} value={o}>{o}</option>)}
               </select>
             </div>
           ))}
           <div style={{gridColumn:"1 / -1"}}>
             <label style={{color:"#888",fontSize:11,letterSpacing:1,display:"block",marginBottom:6,fontFamily:"monospace"}}>NOTES</label>
-            <textarea value={form.notes} onChange={e=>set("notes",e.target.value)} rows={3} style={{width:"100%",background:"#13131f",border:"1px solid #2a2a44",borderRadius:6,color:"#e8e0d0",padding:"10px 12px",fontSize:14,outline:"none",resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
+            <textarea value={form.notes} onChange={e=>set("notes",e.target.value)} rows={3} style={{width:"100%",background:"#1a1a1a",border:"1px solid #2a2a44",borderRadius:6,color:"#F5F5F5",padding:"10px 12px",fontSize:14,outline:"none",resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
           </div>
         </div>
         <div style={{display:"flex",gap:12,marginTop:24,justifyContent:"flex-end"}}>
           <button onClick={onClose} style={{padding:"10px 24px",background:"none",border:"1px solid #333",borderRadius:6,color:"#888",cursor:"pointer",fontSize:14}}>Cancel</button>
-          <button onClick={()=>onSave({...form,value:Number(form.value),id:form.id})} disabled={saving} style={{padding:"10px 28px",background:isAwd?"#cc6600":"#e8401c",border:"none",borderRadius:6,color:"#fff",cursor:saving?"wait":"pointer",fontSize:14,fontWeight:700,opacity:saving?0.7:1}}>
+          <button onClick={()=>onSave({...form,value:Number(form.value),id:form.id})} disabled={saving} style={{padding:"10px 28px",background:isAwd?"#cc6600":"#FFD100",border:"none",borderRadius:6,color:"#0a0a0a",cursor:saving?"wait":"pointer",fontSize:14,fontWeight:700,opacity:saving?0.7:1}}>
             {saving?"Saving...":"Save Project"}
           </button>
         </div>
@@ -211,24 +211,24 @@ function ImportModal({ onClose, onImport, importing }) {
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
       <div style={{background:"#0e0e18",border:"1px solid #2a2a44",borderRadius:12,width:"100%",maxWidth:740,maxHeight:"90vh",overflowY:"auto",padding:32,position:"relative"}}>
         <button onClick={onClose} style={{position:"absolute",top:16,right:20,background:"none",border:"none",color:"#666",fontSize:22,cursor:"pointer"}}>×</button>
-        <h2 style={{color:"#e8e0d0",fontFamily:"'Bebas Neue',sans-serif",fontSize:26,marginBottom:6,letterSpacing:1}}>IMPORT FROM DODGE</h2>
+        <h2 style={{color:"#F5F5F5",fontFamily:"'Bebas Neue',sans-serif",fontSize:26,marginBottom:6,letterSpacing:1}}>IMPORT FROM DODGE</h2>
         <p style={{color:"#555",fontSize:13,marginBottom:20}}>Upload a new Dodge CSV export to add more projects. They save directly to the live database.</p>
-        <div style={{background:"#0a0a14",border:"1px solid #1e1e38",borderRadius:8,padding:16,marginBottom:20,fontSize:12,color:"#555",fontFamily:"monospace",lineHeight:1.8}}>
+        <div style={{background:"#0f0f0f",border:"1px solid #1e1e38",borderRadius:8,padding:16,marginBottom:20,fontSize:12,color:"#555",fontFamily:"monospace",lineHeight:1.8}}>
           1. Go to <span style={{color:"#7a88cc"}}>construction.com</span> → Search Projects<br/>
           2. Filter: State = CT or MA, your counties, Stage = Bidding + Awarded<br/>
-          3. Click <strong style={{color:"#e8e0d0"}}>Export → Download CSV</strong><br/>
+          3. Click <strong style={{color:"#F5F5F5"}}>Export → Download CSV</strong><br/>
           4. Upload below
         </div>
-        <button onClick={()=>fileRef.current.click()} style={{background:"#13131f",border:"1px solid #2a2a44",borderRadius:6,color:"#e8e0d0",padding:"10px 20px",cursor:"pointer",fontSize:13,marginBottom:16}}>📂 Upload Dodge CSV</button>
+        <button onClick={()=>fileRef.current.click()} style={{background:"#1a1a1a",border:"1px solid #2a2a44",borderRadius:6,color:"#F5F5F5",padding:"10px 20px",cursor:"pointer",fontSize:13,marginBottom:16}}>📂 Upload Dodge CSV</button>
         <input ref={fileRef} type="file" accept=".csv,.txt" style={{display:"none"}} onChange={handleFile}/>
         <div>
           <label style={{color:"#888",fontSize:11,letterSpacing:1,display:"block",marginBottom:6,fontFamily:"monospace"}}>OR PASTE CSV TEXT</label>
-          <textarea value={text} onChange={e=>handlePaste(e.target.value)} rows={5} style={{width:"100%",background:"#13131f",border:"1px solid #2a2a44",borderRadius:6,color:"#e8e0d0",padding:"10px 12px",fontSize:12,outline:"none",resize:"vertical",boxSizing:"border-box",fontFamily:"monospace"}}/>
+          <textarea value={text} onChange={e=>handlePaste(e.target.value)} rows={5} style={{width:"100%",background:"#1a1a1a",border:"1px solid #2a2a44",borderRadius:6,color:"#F5F5F5",padding:"10px 12px",fontSize:12,outline:"none",resize:"vertical",boxSizing:"border-box",fontFamily:"monospace"}}/>
         </div>
-        {preview.length>0&&<div style={{marginTop:20}}><div style={{color:"#5a8a6a",fontSize:12,marginBottom:10,fontFamily:"monospace"}}>✓ {preview.length} PROJECTS DETECTED</div><div style={{maxHeight:180,overflowY:"auto",border:"1px solid #1e1e38",borderRadius:6}}>{preview.slice(0,6).map((b,i)=>(<div key={i} style={{display:"grid",gridTemplateColumns:"3fr 1fr 1fr",gap:12,padding:"9px 14px",borderBottom:"1px solid #141420",fontSize:12}}><div style={{color:"#e8e0d0"}}>{b.project}</div><div style={{color:"#888"}}>{b.town}</div><div style={{color:"#c8b89a",fontFamily:"monospace"}}>{fmt$(b.value)}</div></div>))}{preview.length>6&&<div style={{padding:"9px 14px",color:"#555",fontSize:12}}>+{preview.length-6} more...</div>}</div></div>}
+        {preview.length>0&&<div style={{marginTop:20}}><div style={{color:"#5a8a6a",fontSize:12,marginBottom:10,fontFamily:"monospace"}}>✓ {preview.length} PROJECTS DETECTED</div><div style={{maxHeight:180,overflowY:"auto",border:"1px solid #1e1e38",borderRadius:6}}>{preview.slice(0,6).map((b,i)=>(<div key={i} style={{display:"grid",gridTemplateColumns:"3fr 1fr 1fr",gap:12,padding:"9px 14px",borderBottom:"1px solid #141420",fontSize:12}}><div style={{color:"#F5F5F5"}}>{b.project}</div><div style={{color:"#888"}}>{b.town}</div><div style={{color:"#FFD100",fontFamily:"monospace"}}>{fmt$(b.value)}</div></div>))}{preview.length>6&&<div style={{padding:"9px 14px",color:"#555",fontSize:12}}>+{preview.length-6} more...</div>}</div></div>}
         <div style={{display:"flex",gap:12,marginTop:24,justifyContent:"flex-end"}}>
           <button onClick={onClose} style={{padding:"10px 24px",background:"none",border:"1px solid #333",borderRadius:6,color:"#888",cursor:"pointer",fontSize:14}}>Cancel</button>
-          <button disabled={preview.length===0||importing} onClick={()=>onImport(preview)} style={{padding:"10px 28px",background:preview.length>0?"#e8401c":"#1a1a1a",border:"none",borderRadius:6,color:preview.length>0?"#fff":"#444",cursor:preview.length>0&&!importing?"pointer":"default",fontSize:14,fontWeight:700}}>
+          <button disabled={preview.length===0||importing} onClick={()=>onImport(preview)} style={{padding:"10px 28px",background:preview.length>0?"#FFD100":"#1a1a1a",border:"none",borderRadius:6,color:preview.length>0?"#0a0a0a":"#444",cursor:preview.length>0&&!importing?"pointer":"default",fontSize:14,fontWeight:700}}>
             {importing?`Saving to database...`:`Import ${preview.length>0?preview.length:""} Projects`}
           </button>
         </div>
@@ -378,12 +378,12 @@ export default function BidTracker() {
   }),[bids,awarded]);
 
   if(loading) return (
-    <div style={{minHeight:"100vh",background:"#09090f",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
+    <div style={{minHeight:"100vh",background:"#0a0a0a",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
       <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:32,letterSpacing:4,color:"#e8401c"}}>EQUIPMENTSHARE</div>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:32,letterSpacing:4,color:"#FFD100"}}>EQUIPMENTSHARE</div>
       <div style={{color:"#444",fontSize:13,letterSpacing:2,fontFamily:"monospace"}}>LOADING LIVE DATABASE...</div>
-      <div style={{width:200,height:2,background:"#1a1a2e",borderRadius:2,overflow:"hidden"}}>
-        <div style={{height:"100%",background:"#e8401c",animation:"load 1.5s ease-in-out infinite",width:"40%"}}/>
+      <div style={{width:200,height:2,background:"#222222",borderRadius:2,overflow:"hidden"}}>
+        <div style={{height:"100%",background:"#FFD100",animation:"load 1.5s ease-in-out infinite",width:"40%"}}/>
       </div>
       {dbError&&<div style={{color:"#cc4444",fontSize:12,maxWidth:400,textAlign:"center",padding:"0 20px"}}>{dbError}</div>}
       <style>{`@keyframes load{0%{transform:translateX(-100%)}100%{transform:translateX(600%)}}`}</style>
@@ -391,27 +391,27 @@ export default function BidTracker() {
   );
 
   return (
-    <div style={{minHeight:"100vh",background:"#09090f",fontFamily:"'DM Sans','Segoe UI',sans-serif",color:"#e8e0d0"}}>
+    <div style={{minHeight:"100vh",background:"#0a0a0a",fontFamily:"'DM Sans','Segoe UI',sans-serif",color:"#F5F5F5"}}>
       <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
       <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
 
       {/* Header */}
-      <div style={{borderBottom:"1px solid #1a1a2e",padding:"16px 32px",display:"flex",alignItems:"center",justifyContent:"space-between",background:"#0a0a14"}}>
+      <div style={{borderBottom:"1px solid #1a1a2e",padding:"16px 32px",display:"flex",alignItems:"center",justifyContent:"space-between",background:"#0f0f0f"}}>
         <div style={{display:"flex",alignItems:"baseline",gap:12}}>
-          <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:3,color:"#e8401c"}}>EQUIPMENTSHARE</span>
+          <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,letterSpacing:4,color:"#FFD100"}}>EQUIPMENTSHARE</span>
           <span style={{color:"#444",fontSize:16}}>|</span>
           <span style={{color:"#666",fontSize:12,letterSpacing:2}}>BID INTELLIGENCE · LIVE</span>
           {lastSync&&<span style={{color:"#2a4a2a",fontSize:10,fontFamily:"monospace",marginLeft:8}}>● synced {lastSync.toLocaleTimeString()}</span>}
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <button onClick={()=>loadBids(false)} style={{background:"#13131f",border:"1px solid #2a2a44",borderRadius:6,color:"#666",padding:"7px 14px",cursor:"pointer",fontSize:12}}>↻ Refresh</button>
-          <button onClick={()=>setShowImport(true)} style={{background:"#13131f",border:"1px solid #2a2a44",borderRadius:6,color:"#c8b89a",padding:"8px 16px",cursor:"pointer",fontSize:13}}>⬆ Import Dodge CSV</button>
-          <button onClick={()=>setModal("add")} style={{background:"#e8401c",border:"none",borderRadius:6,color:"#fff",padding:"9px 18px",cursor:"pointer",fontSize:13,fontWeight:600}}>+ Add Project</button>
+          <button onClick={()=>loadBids(false)} style={{background:"#1a1a1a",border:"1px solid #2a2a44",borderRadius:6,color:"#666",padding:"7px 14px",cursor:"pointer",fontSize:12}}>↻ Refresh</button>
+          <button onClick={()=>setShowImport(true)} style={{background:"#1a1a1a",border:"1px solid #2a2a44",borderRadius:6,color:"#FFD100",padding:"8px 16px",cursor:"pointer",fontSize:13,fontWeight:600}}>⬆ Import Dodge CSV</button>
+          <button onClick={()=>setModal("add")} style={{background:"#FFD100",border:"none",borderRadius:6,color:"#0a0a0a",padding:"9px 18px",cursor:"pointer",fontSize:13,fontWeight:700}}>+ Add Project</button>
         </div>
       </div>
 
       {/* DB Error Banner */}
-      {dbError&&<div style={{background:"#2a0a0a",borderBottom:"1px solid #cc4444",padding:"10px 32px",color:"#cc8888",fontSize:12,fontFamily:"monospace"}}>⚠ Database error: {dbError} — <button onClick={()=>loadBids(true)} style={{background:"none",border:"none",color:"#e8401c",cursor:"pointer",fontSize:12,textDecoration:"underline"}}>retry</button></div>}
+      {dbError&&<div style={{background:"#2a0a0a",borderBottom:"1px solid #cc4444",padding:"10px 32px",color:"#cc8888",fontSize:12,fontFamily:"monospace"}}>⚠ Database error: {dbError} — <button onClick={()=>loadBids(true)} style={{background:"none",border:"none",color:"#FFD100",cursor:"pointer",fontSize:12,textDecoration:"underline"}}>retry</button></div>}
 
       {/* Award Alert Banner */}
       {awarded.length>0&&(
@@ -429,11 +429,11 @@ export default function BidTracker() {
       )}
 
       {/* Stats */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:1,borderBottom:"1px solid #1a1a2e",background:"#1a1a2e"}}>
-        {[["ACTIVE BIDS",stats.total,null],["PIPELINE VALUE",fmt$(stats.pipeline),null],["🏆 NEED CONTACT",stats.awarded,stats.awarded>0?"#ffaa00":null],["BID IN ≤7 DAYS",stats.urgent,stats.urgent>0?"#e8401c":null]].map(([label,val,color])=>(
-          <div key={label} style={{background:"#0a0a14",padding:"18px 24px",borderRight:"1px solid #1a1a2e"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:1,borderBottom:"1px solid #1a1a2e",background:"#222222"}}>
+        {[["ACTIVE BIDS",stats.total,null],["PIPELINE VALUE",fmt$(stats.pipeline),"#FFD100"],["🏆 NEED CONTACT",stats.awarded,stats.awarded>0?"#ffaa00":null],["BID IN ≤7 DAYS",stats.urgent,stats.urgent>0?"#FFD100":null]].map(([label,val,color])=>(
+          <div key={label} style={{background:"#0f0f0f",padding:"18px 24px",borderRight:"1px solid #1a1a2e"}}>
             <div style={{color:"#444",fontSize:10,letterSpacing:2,marginBottom:5,fontFamily:"monospace"}}>{label}</div>
-            <div style={{fontSize:26,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,color:color||"#e8e0d0"}}>{val}</div>
+            <div style={{fontSize:26,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,color:color||"#F5F5F5"}}>{val}</div>
           </div>
         ))}
       </div>
@@ -441,7 +441,7 @@ export default function BidTracker() {
       {/* Day Route Buttons */}
       <div style={{padding:"12px 32px",display:"flex",gap:8,alignItems:"center",borderBottom:"1px solid #141420",background:"#0a0a12",flexWrap:"wrap"}}>
         <span style={{color:"#444",fontSize:10,fontFamily:"monospace",letterSpacing:2,marginRight:4,whiteSpace:"nowrap"}}>FIELD DAY:</span>
-        <button onClick={()=>setFilterDay("All")} style={{padding:"8px 16px",borderRadius:6,border:`1px solid ${filterDay==="All"?"#666":"#222"}`,background:filterDay==="All"?"#2a2a3a":"transparent",color:filterDay==="All"?"#e8e0d0":"#444",cursor:"pointer",fontSize:12,fontWeight:700,letterSpacing:1}}>ALL</button>
+        <button onClick={()=>setFilterDay("All")} style={{padding:"8px 16px",borderRadius:6,border:`1px solid ${filterDay==="All"?"#666":"#222"}`,background:filterDay==="All"?"#FFD100":"transparent",color:filterDay==="All"?"#0a0a0a":"#555",cursor:"pointer",fontSize:12,fontWeight:700,letterSpacing:1}}>ALL</button>
         {Object.entries(DAY_ROUTES).map(([day,r])=>{
           const active=filterDay===day;
           const dayCount=bids.filter(b=>getDay(b)===day&&!["Won","Lost"].includes(b.status)).length;
@@ -458,10 +458,10 @@ export default function BidTracker() {
       </div>
 
       {/* Filters */}
-      <div style={{padding:"12px 32px",display:"flex",gap:10,alignItems:"center",borderBottom:"1px solid #141420",flexWrap:"wrap",background:"#0b0b16"}}>
-        <input placeholder="Search project, GC, owner, town..." value={search} onChange={e=>setSearch(e.target.value)} style={{background:"#13131f",border:"1px solid #2a2a44",borderRadius:6,color:"#e8e0d0",padding:"8px 14px",fontSize:13,outline:"none",width:240}}/>
+      <div style={{padding:"12px 32px",display:"flex",gap:10,alignItems:"center",borderBottom:"1px solid #141420",flexWrap:"wrap",background:"#111111"}}>
+        <input placeholder="Search project, GC, owner, town..." value={search} onChange={e=>setSearch(e.target.value)} style={{background:"#1a1a1a",border:"1px solid #2a2a44",borderRadius:6,color:"#F5F5F5",padding:"8px 14px",fontSize:13,outline:"none",width:240}}/>
         {[["Status",filterStatus,setFilterStatus,["All",...STATUS_OPTIONS]],["Type",filterType,setFilterType,["All",...TYPE_OPTIONS]],["Priority",filterPriority,setFilterPriority,["All",...PRIORITY_OPTIONS]],["Town",filterTown,setFilterTown,["All",...TOWN_OPTIONS]],["Quadrant",filterQuadrant,setFilterQuadrant,["All",...QUADRANT_OPTIONS]],["Sort",sortBy,setSortBy,[["bidDate","Bid Date"],["value","Value"],["priority","Priority"]]]].map(([label,val,setter,opts])=>(
-          <select key={label} value={val} onChange={e=>setter(e.target.value)} style={{background:"#13131f",border:"1px solid #2a2a44",borderRadius:6,color:val==="All"||val==="bidDate"?"#555":"#e8e0d0",padding:"8px 10px",fontSize:12,outline:"none"}}>
+          <select key={label} value={val} onChange={e=>setter(e.target.value)} style={{background:"#1a1a1a",border:"1px solid #2a2a44",borderRadius:6,color:val==="All"||val==="bidDate"?"#555":"#F5F5F5",padding:"8px 10px",fontSize:12,outline:"none"}}>
             {opts.map(o=>Array.isArray(o)?<option key={o[0]} value={o[0]}>{o[1]}</option>:<option key={o} value={o}>{o==="All"?`All ${label}s`:o}</option>)}
           </select>
         ))}
@@ -474,7 +474,7 @@ export default function BidTracker() {
           ?<div style={{textAlign:"center",color:"#333",padding:60}}>No projects match your filters.</div>
           :<>
             <div style={{display:"grid",gridTemplateColumns:"3fr 1.1fr 1fr 0.6fr 1fr 1.3fr 24px",gap:16,padding:"10px 16px",borderBottom:"1px solid #1e1e30",color:"#333",fontSize:10,fontFamily:"monospace",letterSpacing:1}}>
-              {["PROJECT / GC","VALUE","BID DATE","PRI","DAY / COUNTY","STATUS",""].map(h=><div key={h}>{h}</div>)}
+              {["PROJECT / GC","VALUE","BID DATE","PRI","DAY / COUNTY","STATUS",""].map(h=><div key={h} style={{color:"#4a4a00",letterSpacing:1}}>{h}</div>)}
             </div>
             {filtered.map((bid,i)=>{
               const days=daysUntil(bid.bidDate);
@@ -485,19 +485,19 @@ export default function BidTracker() {
               const q=getQuadrant(bid); const qc=QUADRANT_COLORS[q];
               return (
                 <div key={bid.id} onClick={()=>setModal(bid)}
-                  style={{borderBottom:"1px solid #141420",display:"grid",gridTemplateColumns:"3fr 1.1fr 1fr 0.6fr 1fr 1.3fr 24px",gap:16,alignItems:"center",padding:"14px 16px",cursor:"pointer",borderLeft:`3px solid ${isAwd?"#cc6600":PRIORITY_COLORS[bid.priority]}`,background:isAwd?(i%2===0?"#110900":"#140b00"):(i%2===0?"transparent":"#0c0c16"),transition:"background 0.12s"}}
-                  onMouseEnter={e=>e.currentTarget.style.background=isAwd?"#1a1000":"#111120"}
-                  onMouseLeave={e=>e.currentTarget.style.background=isAwd?(i%2===0?"#110900":"#140b00"):(i%2===0?"transparent":"#0c0c16")}
+                  style={{borderBottom:"1px solid #141420",display:"grid",gridTemplateColumns:"3fr 1.1fr 1fr 0.6fr 1fr 1.3fr 24px",gap:16,alignItems:"center",padding:"14px 16px",cursor:"pointer",borderLeft:`3px solid ${isAwd?"#cc6600":PRIORITY_COLORS[bid.priority]}`,background:isAwd?(i%2===0?"#110900":"#140b00"):(i%2===0?"transparent":"#141414"),transition:"background 0.12s"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=isAwd?"#1a1000":"#1f1f1f"}
+                  onMouseLeave={e=>e.currentTarget.style.background=isAwd?(i%2===0?"#110900":"#140b00"):(i%2===0?"transparent":"#141414")}
                 >
                   <div>
-                    <div style={{fontWeight:600,fontSize:13,color:isAwd?"#ffcc44":"#e8e0d0",marginBottom:2}}>{bid.project}</div>
-                    <div style={{fontSize:11,color:"#555"}}>{bid.awardedTo?<span>🏆 <span style={{color:"#ffaa00"}}>{bid.awardedTo}</span></span>:bid.gc!=="TBD"?bid.gc:<span style={{color:"#e8401c",fontSize:10}}>GC TBD</span>}{" · "}{bid.town}</div>
+                    <div style={{fontWeight:600,fontSize:13,color:isAwd?"#ffcc44":"#F5F5F5",marginBottom:2}}>{bid.project}</div>
+                    <div style={{fontSize:11,color:"#555"}}>{bid.awardedTo?<span>🏆 <span style={{color:"#ffaa00"}}>{bid.awardedTo}</span></span>:bid.gc!=="TBD"?bid.gc:<span style={{color:"#FFD100",fontSize:10}}>GC TBD</span>}{" · "}{bid.town}</div>
                     {bid.notes&&<div style={{fontSize:10,color:"#3a3a4a",marginTop:2}}>{bid.notes.slice(0,70)}{bid.notes.length>70?"…":""}</div>}
                   </div>
-                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:17,color:"#c8b89a",letterSpacing:1}}>{fmt$(bid.value)}<div style={{fontSize:9,color:"#3a3a4a",fontFamily:"monospace"}}>{bid.type.toUpperCase()}</div></div>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:17,color:"#FFD100",letterSpacing:1}}>{fmt$(bid.value)}<div style={{fontSize:9,color:"#3a3a4a",fontFamily:"monospace"}}>{bid.type.toUpperCase()}</div></div>
                   <div>
-                    <div style={{fontSize:12,color:isUrgent?"#e8401c":isAwd?"#ffaa00":"#666"}}>{isAwd&&bid.awardDate?`Awd ${fmtDate(bid.awardDate)}`:fmtDate(bid.bidDate)}</div>
-                    {!isAwd&&days!==null&&<div style={{fontSize:10,color:isUrgent?"#e8401c":"#3a3a4a"}}>{days<0?`${Math.abs(days)}d ago`:days===0?"TODAY":`in ${days}d`}</div>}
+                    <div style={{fontSize:12,color:isUrgent?"#FFD100":isAwd?"#ffaa00":"#666"}}>{isAwd&&bid.awardDate?`Awd ${fmtDate(bid.awardDate)}`:fmtDate(bid.bidDate)}</div>
+                    {!isAwd&&days!==null&&<div style={{fontSize:10,color:isUrgent?"#FFD100":"#3a3a4a"}}>{days<0?`${Math.abs(days)}d ago`:days===0?"TODAY":`in ${days}d`}</div>}
                   </div>
                   <div style={{width:7,height:7,borderRadius:"50%",background:PRIORITY_COLORS[bid.priority],boxShadow:`0 0 6px ${PRIORITY_COLORS[bid.priority]}`,margin:"0 auto"}} title={bid.priority}/>
                   <div style={{display:"flex",flexDirection:"column",gap:3}}>
@@ -513,10 +513,10 @@ export default function BidTracker() {
         }
       </div>
 
-      <div style={{padding:"12px 32px",borderTop:"1px solid #141420",display:"flex",gap:20,alignItems:"center",color:"#333",fontSize:11,fontFamily:"monospace"}}>
+      <div style={{padding:"12px 32px",borderTop:"1px solid #141420",display:"flex",gap:20,alignItems:"center",color:"#3a3a3a",fontSize:11,fontFamily:"monospace"}}>
         {PRIORITY_OPTIONS.map(p=>(<span key={p} style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:7,height:7,borderRadius:"50%",background:PRIORITY_COLORS[p],display:"inline-block"}}/>{p}</span>))}
         <span style={{marginLeft:16,color:"#663300"}}>🏆 Awarded = contact immediately</span>
-        <span style={{marginLeft:"auto",color:"#1a4a1a"}}>● LIVE · {bids.length} projects · auto-refresh 60s</span>
+        <span style={{marginLeft:"auto",color:"#2a4a0a"}}>● LIVE · {bids.length} projects · auto-refresh 60s</span>
       </div>
 
       {modal&&<BidModal bid={modal==="add"?null:modal} onClose={()=>setModal(null)} onSave={saveBid} saving={saving}/>}
