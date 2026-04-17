@@ -784,7 +784,7 @@ function TerritoryMap() {
     if (document.getElementById("gmaps-script")) return;
     const s = document.createElement("script");
     s.id = "gmaps-script";
-    s.src = "https://maps.googleapis.com/maps/api/js?key=AIzaSyDWtNhw_VfRa3bH6-9N35As9BBy-48YIIo&callback=gmapReady";
+    s.src = "https://maps.googleapis.com/maps/api/js?key=AIzaSyB41DRUbKWJHPxaFjMAwdrzWzbVKartNBY&callback=gmapReady";
     s.async = true;
     window.gmapReady = () => setMapLoaded(true);
     document.head.appendChild(s);
@@ -864,7 +864,7 @@ function TerritoryMap() {
       </div>
 
       {/* Main layout */}
-      <div style={{display:"flex",height:"calc(100vh - 110px)"}}>
+      <div style={{display:"flex",height:"calc(100vh - 110px)",minHeight:"500px",overflow:"hidden"}}>
         {/* Sidebar */}
         <div style={{width:320,background:"#0d0d0d",borderRight:"1px solid #1a1a1a",display:"flex",flexDirection:"column",flexShrink:0}}>
           <div style={{padding:"10px 14px",borderBottom:"1px solid #1a1a1a",display:"flex",gap:8,alignItems:"center"}}>
@@ -917,8 +917,8 @@ function TerritoryMap() {
         </div>
 
         {/* Map */}
-        <div style={{flex:1,position:"relative"}}>
-          <div ref={mapRef} style={{width:"100%",height:"100%"}}/>
+        <div style={{flex:1,position:"relative",minHeight:0}}>
+          <div ref={mapRef} style={{width:"100%",height:"100%",minHeight:"500px"}}/>
           {!mapLoaded&&<div style={{position:"absolute",inset:0,background:"#0a0a0a",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{color:"#FFD100",fontFamily:"'Bebas Neue',sans-serif",fontSize:20,letterSpacing:3}}>LOADING MAP...</div></div>}
 
           {/* Selected card */}
