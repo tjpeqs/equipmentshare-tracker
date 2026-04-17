@@ -1,5 +1,8 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  BID TRACKER  (Supabase-wired)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // ── Supabase config ──────────────────────────────────────────────────────────
 const SUPABASE_URL = "https://tcnknguceotzqmfhzxzo.supabase.co";
 const SUPABASE_KEY = "sb_publishable_3hBluPXIJRhbY6s1ol3L3Q_JmZkJsiA";
@@ -238,7 +241,7 @@ function ImportModal({ onClose, onImport, importing }) {
 }
 
 // ── Main App ─────────────────────────────────────────────────────────────────
-export default function BidTracker() {
+function BidTracker() {
   const [bids, setBids]         = useState([]);
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
@@ -521,6 +524,556 @@ export default function BidTracker() {
 
       {modal&&<BidModal bid={modal==="add"?null:modal} onClose={()=>setModal(null)} onSave={saveBid} saving={saving}/>}
       {showImport&&<ImportModal onClose={()=>setShowImport(false)} onImport={importBids} importing={importing}/>}
+    </div>
+  );
+}
+
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  TERRITORY MAP  (Supabase-wired, add/edit/delete companies)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+const DAY_CONFIG = {
+  Monday:    { color:"#4a9eff", bg:"#091929", border:"#1a4a7a", label:"MON", desc:"S. Litchfield + Waterbury" },
+  Tuesday:   { color:"#b04ae8", bg:"#120d1e", border:"#4a1a6b", label:"TUE", desc:"Berkshires AM · Springfield PM" },
+  Wednesday: { color:"#4ae8a0", bg:"#091a12", border:"#1a6b40", label:"WED", desc:"W. + N. Litchfield Loop" },
+  Thursday:  { color:"#e8c84a", bg:"#1a1600", border:"#6b5200", label:"THU", desc:"Hartford + 84 Corridor" },
+};
+const TYPE_OPTIONS_MAP = ["GC","Excavation","Paving","Roofing","Industrial","Other"];
+const PRIORITY_OPTIONS_MAP = ["High","Medium","Low"];
+const STATE_OPTIONS = ["CT","MA"];
+const TYPE_ICONS = { GC:"🏗", Excavation:"⛏", Paving:"🚧", Roofing:"🏠", Industrial:"🏭", Other:"📍" };
+const PRIORITY_COLORS_MAP = { High:"#FFD100", Medium:"#4a9eff", Low:"#555" };
+
+const BLANK_COMPANY = { name:"", day:"Monday", type:"GC", lat:"", lng:"", town:"", state:"CT", phone:"", notes:"", priority:"Medium", website:"", contact:"" };
+
+function CompanyModal({ company, onClose, onSave, saving }) {
+  const [form, setForm] = useState(company || BLANK_COMPANY);
+  const set = (k,v) => setForm(f=>({...f,[k]:v}));
+  const dc = DAY_CONFIG[form.day] || DAY_CONFIG.Monday;
+  const isNew = !company;
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{background:"#0f0f0f",border:`1px solid ${dc.color}`,borderRadius:12,width:"100%",maxWidth:600,maxHeight:"90vh",overflowY:"auto",padding:32,position:"relative",boxShadow:`0 0 30px ${dc.color}22`}}>
+        <button onClick={onClose} style={{position:"absolute",top:16,right:20,background:"none",border:"none",color:"#555",fontSize:22,cursor:"pointer"}}>×</button>
+        <h2 style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:24,letterSpacing:2,color:"#FFD100",marginBottom:6}}>{isNew?"ADD COMPANY":"EDIT COMPANY"}</h2>
+        <p style={{color:"#444",fontSize:12,marginBottom:24,fontFamily:"monospace"}}>All fields save directly to the live database.</p>
+
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+          {/* Company Name - full width */}
+          <div style={{gridColumn:"1 / -1"}}>
+            <label style={{color:"#888",fontSize:10,letterSpacing:1,display:"block",marginBottom:5,fontFamily:"monospace"}}>COMPANY NAME *</label>
+            <input value={form.name} onChange={e=>set("name",e.target.value)} placeholder="e.g. Smith Excavation LLC"
+              style={{width:"100%",background:"#1a1a1a",border:`1px solid ${form.name?"#444":"#2a2a2a"}`,borderRadius:6,color:"#f5f5f5",padding:"10px 12px",fontSize:14,outline:"none",boxSizing:"border-box"}}/>
+          </div>
+
+          {/* Day */}
+          <div>
+            <label style={{color:"#888",fontSize:10,letterSpacing:1,display:"block",marginBottom:5,fontFamily:"monospace"}}>ROUTE DAY</label>
+            <select value={form.day} onChange={e=>set("day",e.target.value)}
+              style={{width:"100%",background:"#1a1a1a",border:`1px solid ${dc.border}`,borderRadius:6,color:dc.color,padding:"10px 12px",fontSize:13,outline:"none"}}>
+              {Object.keys(DAY_CONFIG).map(d=><option key={d} value={d}>{DAY_CONFIG[d].label} — {DAY_CONFIG[d].desc}</option>)}
+            </select>
+          </div>
+
+          {/* Type */}
+          <div>
+            <label style={{color:"#888",fontSize:10,letterSpacing:1,display:"block",marginBottom:5,fontFamily:"monospace"}}>COMPANY TYPE</label>
+            <select value={form.type} onChange={e=>set("type",e.target.value)}
+              style={{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:"#f5f5f5",padding:"10px 12px",fontSize:13,outline:"none"}}>
+              {TYPE_OPTIONS_MAP.map(t=><option key={t} value={t}>{TYPE_ICONS[t]} {t}</option>)}
+            </select>
+          </div>
+
+          {/* Phone */}
+          <div>
+            <label style={{color:"#888",fontSize:10,letterSpacing:1,display:"block",marginBottom:5,fontFamily:"monospace"}}>PHONE</label>
+            <input value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder="(860) 555-0100"
+              style={{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:"#FFD100",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+          </div>
+
+          {/* Contact name */}
+          <div>
+            <label style={{color:"#888",fontSize:10,letterSpacing:1,display:"block",marginBottom:5,fontFamily:"monospace"}}>CONTACT NAME</label>
+            <input value={form.contact||""} onChange={e=>set("contact",e.target.value)} placeholder="e.g. Mike Smith"
+              style={{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:"#f5f5f5",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+          </div>
+
+          {/* Town */}
+          <div>
+            <label style={{color:"#888",fontSize:10,letterSpacing:1,display:"block",marginBottom:5,fontFamily:"monospace"}}>TOWN</label>
+            <input value={form.town} onChange={e=>set("town",e.target.value)} placeholder="e.g. Torrington"
+              style={{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:"#f5f5f5",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+          </div>
+
+          {/* State */}
+          <div>
+            <label style={{color:"#888",fontSize:10,letterSpacing:1,display:"block",marginBottom:5,fontFamily:"monospace"}}>STATE</label>
+            <select value={form.state} onChange={e=>set("state",e.target.value)}
+              style={{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:"#f5f5f5",padding:"10px 12px",fontSize:13,outline:"none"}}>
+              {STATE_OPTIONS.map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+
+          {/* Priority */}
+          <div>
+            <label style={{color:"#888",fontSize:10,letterSpacing:1,display:"block",marginBottom:5,fontFamily:"monospace"}}>PRIORITY</label>
+            <select value={form.priority} onChange={e=>set("priority",e.target.value)}
+              style={{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:PRIORITY_COLORS_MAP[form.priority],padding:"10px 12px",fontSize:13,outline:"none"}}>
+              {PRIORITY_OPTIONS_MAP.map(p=><option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+
+          {/* Lat / Lng */}
+          <div>
+            <label style={{color:"#888",fontSize:10,letterSpacing:1,display:"block",marginBottom:5,fontFamily:"monospace"}}>LATITUDE <span style={{color:"#444"}}>(optional — auto from town)</span></label>
+            <input type="number" step="0.0001" value={form.lat||""} onChange={e=>set("lat",e.target.value)} placeholder="41.8049"
+              style={{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:"#f5f5f5",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+          </div>
+          <div>
+            <label style={{color:"#888",fontSize:10,letterSpacing:1,display:"block",marginBottom:5,fontFamily:"monospace"}}>LONGITUDE</label>
+            <input type="number" step="0.0001" value={form.lng||""} onChange={e=>set("lng",e.target.value)} placeholder="-73.1175"
+              style={{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:"#f5f5f5",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+          </div>
+
+          {/* Notes - full width */}
+          <div style={{gridColumn:"1 / -1"}}>
+            <label style={{color:"#888",fontSize:10,letterSpacing:1,display:"block",marginBottom:5,fontFamily:"monospace"}}>NOTES</label>
+            <textarea value={form.notes} onChange={e=>set("notes",e.target.value)} rows={3} placeholder="What do they work on? Who's the decision maker? Equipment rental potential?"
+              style={{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:"#f5f5f5",padding:"10px 12px",fontSize:13,outline:"none",resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
+          </div>
+
+          {/* Website */}
+          <div style={{gridColumn:"1 / -1"}}>
+            <label style={{color:"#888",fontSize:10,letterSpacing:1,display:"block",marginBottom:5,fontFamily:"monospace"}}>WEBSITE <span style={{color:"#444"}}>(optional)</span></label>
+            <input value={form.website||""} onChange={e=>set("website",e.target.value)} placeholder="https://..."
+              style={{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:"#4a9eff",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+          </div>
+        </div>
+
+        <div style={{display:"flex",gap:10,marginTop:24,justifyContent:"flex-end"}}>
+          <button onClick={onClose} style={{padding:"10px 22px",background:"none",border:"1px solid #333",borderRadius:6,color:"#666",cursor:"pointer",fontSize:13}}>Cancel</button>
+          <button onClick={()=>onSave(form)} disabled={!form.name||saving}
+            style={{padding:"10px 28px",background:form.name?"#FFD100":"#222",border:"none",borderRadius:6,color:form.name?"#0a0a0a":"#555",cursor:form.name&&!saving?"pointer":"default",fontSize:13,fontWeight:700,opacity:saving?0.7:1}}>
+            {saving?"Saving...":(isNew?"Add to Map":"Save Changes")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Default lat/lng for towns when user doesn't provide coords
+const TOWN_COORDS = {
+  "Torrington":{lat:41.8005,lng:-73.1212},"Winsted":{lat:41.9282,lng:-73.0626},
+  "Litchfield":{lat:41.7490,lng:-73.1876},"New Milford":{lat:41.5776,lng:-73.4082},
+  "Waterbury":{lat:41.5582,lng:-73.0515},"Danbury":{lat:41.3948,lng:-73.4540},
+  "Sharon":{lat:41.8676,lng:-73.4793},"Canaan":{lat:42.0234,lng:-73.3282},
+  "Norfolk":{lat:41.9954,lng:-73.1996},"Salisbury":{lat:41.9790,lng:-73.4204},
+  "Pittsfield":{lat:42.4501,lng:-73.2553},"Great Barrington":{lat:42.1959,lng:-73.3626},
+  "Lenox":{lat:42.3648,lng:-73.2848},"North Adams":{lat:42.7001,lng:-73.1087},
+  "Lee":{lat:42.2989,lng:-73.2495},"Sheffield":{lat:42.0968,lng:-73.3582},
+  "Springfield":{lat:42.1015,lng:-72.5898},"Chicopee":{lat:42.1487,lng:-72.6079},
+  "Holyoke":{lat:42.2042,lng:-72.6162},"Westfield":{lat:42.1495,lng:-72.7496},
+  "Agawam":{lat:42.0701,lng:-72.6218},"West Springfield":{lat:42.1056,lng:-72.6398},
+  "Southwick":{lat:42.0579,lng:-72.7734},"Ludlow":{lat:42.1614,lng:-72.4801},
+};
+
+function TerritoryMap() {
+  const [companies, setCompanies] = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [saving, setSaving]       = useState(false);
+  const [dbError, setDbError]     = useState(null);
+  const [activeDay, setActiveDay] = useState("All");
+  const [activeType, setActiveType] = useState("All");
+  const [search, setSearch]       = useState("");
+  const [selected, setSelected]   = useState(null);
+  const [modal, setModal]         = useState(null); // null | "add" | company obj
+  const [mapLoaded, setMapLoaded] = useState(false);
+  const mapRef  = useRef(null);
+  const mapObj  = useRef(null);
+  const markers = useRef([]);
+  const infoWin = useRef(null);
+
+  // ── Load companies from Supabase ──────────────────────────────────────
+  const loadCompanies = useCallback(async () => {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/companies?select=*&order=id.asc&limit=1000`, {
+        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setCompanies(data || []);
+      setDbError(null);
+    } catch(e) {
+      setDbError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadCompanies(); }, [loadCompanies]);
+
+  // ── Save company ──────────────────────────────────────────────────────
+  const saveCompany = async (form) => {
+    setSaving(true);
+    try {
+      // Auto-assign coords from town if not provided
+      let lat = parseFloat(form.lat) || 0;
+      let lng = parseFloat(form.lng) || 0;
+      if ((!lat || !lng) && TOWN_COORDS[form.town]) {
+        lat = TOWN_COORDS[form.town].lat;
+        lng = TOWN_COORDS[form.town].lng;
+      }
+
+      const payload = { name:form.name, day:form.day, type:form.type, lat, lng,
+        town:form.town, state:form.state, phone:form.phone, notes:form.notes,
+        priority:form.priority, website:form.website||null, contact:form.contact||null };
+
+      if (form.id) {
+        // Update
+        await fetch(`${SUPABASE_URL}/rest/v1/companies?id=eq.${form.id}`, {
+          method:"PATCH",
+          headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,"Content-Type":"application/json","Prefer":"return=minimal"},
+          body:JSON.stringify(payload)
+        });
+        setCompanies(prev => prev.map(c => c.id===form.id ? {...c,...payload} : c));
+      } else {
+        // Insert
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/companies`, {
+          method:"POST",
+          headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,"Content-Type":"application/json","Prefer":"return=representation"},
+          body:JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data && data[0]) setCompanies(prev => [...prev, data[0]]);
+      }
+      setModal(null);
+    } catch(e) {
+      alert("Save failed: " + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── Delete company ────────────────────────────────────────────────────
+  const deleteCompany = async (id) => {
+    if (!confirm("Remove this company from the map?")) return;
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/companies?id=eq.${id}`, {
+        method:"DELETE",
+        headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,"Prefer":"return=minimal"}
+      });
+      setCompanies(prev => prev.filter(c => c.id !== id));
+      if (selected?.id === id) setSelected(null);
+    } catch(e) { alert("Delete failed: " + e.message); }
+  };
+
+  const filtered = companies.filter(c => {
+    if (activeDay !== "All" && c.day !== activeDay) return false;
+    if (activeType !== "All" && c.type !== activeType) return false;
+    if (search && !c.name?.toLowerCase().includes(search.toLowerCase()) &&
+        !c.town?.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
+  // ── Google Maps ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (window.google) { setMapLoaded(true); return; }
+    if (document.getElementById("gmaps-script")) return;
+    const s = document.createElement("script");
+    s.id = "gmaps-script";
+    s.src = "https://maps.googleapis.com/maps/api/js?key=AIzaSyB41DRUbKWJHPxaFjMAwdrzWzbVKartNBY&callback=gmapReady";
+    s.async = true;
+    window.gmapReady = () => setMapLoaded(true);
+    document.head.appendChild(s);
+  }, []);
+
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current || mapObj.current) return;
+    mapObj.current = new window.google.maps.Map(mapRef.current, {
+      center:{lat:42.05,lng:-73.15}, zoom:8,
+      styles:[
+        {elementType:"geometry",stylers:[{color:"#1a1a1a"}]},
+        {elementType:"labels.text.fill",stylers:[{color:"#888"}]},
+        {elementType:"labels.text.stroke",stylers:[{color:"#111"}]},
+        {featureType:"road",elementType:"geometry",stylers:[{color:"#2a2a2a"}]},
+        {featureType:"road.highway",elementType:"geometry",stylers:[{color:"#333"}]},
+        {featureType:"water",elementType:"geometry",stylers:[{color:"#0d1117"}]},
+        {featureType:"poi",stylers:[{visibility:"off"}]},
+        {featureType:"transit",stylers:[{visibility:"off"}]},
+        {featureType:"administrative.locality",elementType:"labels.text.fill",stylers:[{color:"#FFD100"}]},
+      ],
+    });
+    infoWin.current = new window.google.maps.InfoWindow();
+  }, [mapLoaded]);
+
+  useEffect(() => {
+    if (!mapObj.current) return;
+    markers.current.forEach(m => m.setMap(null));
+    markers.current = [];
+    filtered.forEach(c => {
+      if (!c.lat || !c.lng) return;
+      const dc = DAY_CONFIG[c.day] || DAY_CONFIG.Monday;
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40"><path d="M16 0C7.2 0 0 7.2 0 16c0 12 16 24 16 24s16-12 16-24C32 7.2 24.8 0 16 0z" fill="${dc.color}" opacity="0.9"/><circle cx="16" cy="16" r="8" fill="#0a0a0a"/><text x="16" y="20" text-anchor="middle" font-size="10" fill="${dc.color}" font-weight="bold" font-family="monospace">${dc.label}</text></svg>`;
+      const marker = new window.google.maps.Marker({
+        position:{lat:c.lat,lng:c.lng}, map:mapObj.current, title:c.name,
+        icon:{url:"data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(svg),scaledSize:new window.google.maps.Size(32,40),anchor:new window.google.maps.Point(16,40)},
+      });
+      marker.addListener("click", () => {
+        setSelected(c);
+        infoWin.current.setContent(`<div style="background:#1a1a1a;border:1px solid ${dc.color};border-radius:8px;padding:12px;min-width:200px;font-family:monospace;"><div style="color:${dc.color};font-size:11px;letter-spacing:2px;margin-bottom:4px">${dc.label} · ${c.type||"GC"}</div><div style="color:#f5f5f5;font-size:14px;font-weight:700;margin-bottom:4px">${c.name}</div><div style="color:#888;font-size:12px;margin-bottom:6px">${c.town||""}, ${c.state||""}</div>${c.phone?`<div style="color:#FFD100;font-size:12px;margin-bottom:4px">${c.phone}</div>`:""}${c.contact?`<div style="color:#666;font-size:11px;margin-bottom:6px">Contact: ${c.contact}</div>`:""}${c.lat&&c.lng?`<a href="https://waze.com/ul?ll=${c.lat},${c.lng}&navigate=yes" target="_blank" style="display:inline-block;padding:5px 12px;background:#05c8f7;border-radius:5px;color:#0a0a0a;font-weight:700;font-size:11px;text-decoration:none;margin-bottom:6px;">🚗 Navigate in Waze</a>`:""}${c.notes?`<div style="color:#555;font-size:11px;margin-top:4px;font-style:italic">${c.notes.slice(0,80)}${c.notes.length>80?"…":""}</div>`:""}</div>`);
+        infoWin.current.open(mapObj.current, marker);
+      });
+      markers.current.push(marker);
+    });
+  }, [filtered, mapLoaded]);
+
+  const types = [...new Set(companies.map(c => c.type).filter(Boolean))];
+
+  if (loading) return (
+    <div style={{height:"calc(100vh - 54px)",background:"#0a0a0a",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,letterSpacing:3,color:"#FFD100"}}>LOADING MAP</div>
+      <div style={{color:"#333",fontSize:11,fontFamily:"monospace"}}>{dbError||"Connecting to database..."}</div>
+    </div>
+  );
+
+  return (
+    <div style={{background:"#0a0a0a",fontFamily:"'DM Sans','Segoe UI',sans-serif",color:"#f5f5f5"}}>
+      {/* Day + type filters */}
+      <div style={{background:"#0a0a0a",borderBottom:"1px solid #1e1e1e",padding:"10px 24px",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+        <span style={{color:"#333",fontSize:10,fontFamily:"monospace",letterSpacing:2,marginRight:4}}>ROUTE DAY:</span>
+        <button onClick={()=>setActiveDay("All")} style={{padding:"6px 14px",borderRadius:5,border:`1px solid ${activeDay==="All"?"#FFD100":"#222"}`,background:activeDay==="All"?"#1a1600":"transparent",color:activeDay==="All"?"#FFD100":"#444",cursor:"pointer",fontSize:11,fontWeight:700}}>ALL</button>
+        {Object.entries(DAY_CONFIG).map(([day,dc])=>{
+          const active=activeDay===day;
+          const cnt=companies.filter(c=>c.day===day).length;
+          return <button key={day} onClick={()=>setActiveDay(active?"All":day)} style={{padding:"6px 14px",borderRadius:5,border:`1px solid ${active?dc.color:dc.border}`,background:active?dc.bg:"transparent",color:active?dc.color:dc.border,cursor:"pointer",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",gap:6,boxShadow:active?`0 0 10px ${dc.color}33`:"none"}}>
+            <span>{dc.label}</span><span style={{opacity:0.6,fontSize:9}}>{dc.desc}</span>
+            <span style={{background:active?`${dc.color}22`:"#111",border:`1px solid ${active?dc.color:dc.border}`,borderRadius:8,padding:"0 6px",fontSize:9}}>{cnt}</span>
+          </button>;
+        })}
+        <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
+          {["All",...types].map(t=>(
+            <button key={t} onClick={()=>setActiveType(t)} style={{padding:"5px 10px",borderRadius:4,border:`1px solid ${activeType===t?"#FFD100":"#222"}`,background:activeType===t?"#1a1600":"transparent",color:activeType===t?"#FFD100":"#444",cursor:"pointer",fontSize:10,fontWeight:activeType===t?700:400}}>
+              {t==="All"?"All Types":(TYPE_ICONS[t]||"📍")+" "+t}
+            </button>
+          ))}
+          <button onClick={()=>setModal("add")} style={{marginLeft:8,padding:"7px 16px",background:"#FFD100",border:"none",borderRadius:6,color:"#0a0a0a",cursor:"pointer",fontSize:12,fontWeight:700,letterSpacing:0.5}}>+ Add Company</button>
+        </div>
+      </div>
+
+      {/* Main layout */}
+      <div style={{display:"flex",height:"calc(100vh - 110px)"}}>
+        {/* Sidebar */}
+        <div style={{width:320,background:"#0d0d0d",borderRight:"1px solid #1a1a1a",display:"flex",flexDirection:"column",flexShrink:0}}>
+          <div style={{padding:"10px 14px",borderBottom:"1px solid #1a1a1a",display:"flex",gap:8,alignItems:"center"}}>
+            <input placeholder="Search company or town..." value={search} onChange={e=>setSearch(e.target.value)}
+              style={{flex:1,background:"#1a1a1a",border:"1px solid #282828",borderRadius:5,color:"#f5f5f5",padding:"7px 11px",fontSize:12,outline:"none"}}/>
+            <span style={{color:"#444",fontSize:10,fontFamily:"monospace",whiteSpace:"nowrap"}}>{filtered.length}/{companies.length}</span>
+          </div>
+          <div style={{overflowY:"auto",flex:1}}>
+            {Object.entries(DAY_CONFIG).map(([day,dc])=>{
+              const dayCos = filtered.filter(c=>c.day===day);
+              if (!dayCos.length) return null;
+              return <div key={day}>
+                <div style={{padding:"8px 14px 5px",background:"#0a0a0a",borderBottom:"1px solid #151515",display:"flex",alignItems:"center",gap:8,position:"sticky",top:0,zIndex:1}}>
+                  <span style={{fontFamily:"monospace",fontSize:9,fontWeight:700,letterSpacing:2,color:dc.color,background:dc.bg,border:`1px solid ${dc.border}`,borderRadius:3,padding:"2px 7px"}}>{dc.label}</span>
+                  <span style={{color:"#444",fontSize:10}}>{dc.desc}</span>
+                  <span style={{marginLeft:"auto",color:dc.border,fontSize:9,fontFamily:"monospace"}}>{dayCos.length}</span>
+                </div>
+                {dayCos.map(c=>{
+                  const isSel=selected?.id===c.id;
+                  return <div key={c.id} onClick={()=>{setSelected(c);if(mapObj.current&&c.lat&&c.lng)mapObj.current.panTo({lat:c.lat,lng:c.lng});}}
+                    style={{padding:"9px 14px",borderBottom:"1px solid #141414",cursor:"pointer",background:isSel?dc.bg:"transparent",borderLeft:isSel?`3px solid ${dc.color}`:"3px solid transparent",transition:"all 0.1s"}}
+                    onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background="#111";}}
+                    onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
+                    <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:2}}>
+                      <span style={{fontSize:12}}>{TYPE_ICONS[c.type]||"🏗"}</span>
+                      <span style={{fontWeight:600,fontSize:12,color:isSel?dc.color:"#f5f5f5",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</span>
+                      <div style={{display:"flex",gap:4,flexShrink:0}}>
+                        <button onClick={e=>{e.stopPropagation();setModal(c);}} style={{background:"none",border:"1px solid #333",borderRadius:3,color:"#555",cursor:"pointer",fontSize:9,padding:"1px 5px"}} title="Edit">✎</button>
+                        <button onClick={e=>{e.stopPropagation();deleteCompany(c.id);}} style={{background:"none",border:"1px solid #2a1a1a",borderRadius:3,color:"#553333",cursor:"pointer",fontSize:9,padding:"1px 5px"}} title="Remove" onMouseEnter={e=>e.currentTarget.style.color="#cc4444"} onMouseLeave={e=>e.currentTarget.style.color="#553333"}>✕</button>
+                      </div>
+                    </div>
+                    <div style={{fontSize:10,color:"#555"}}>{c.town}{c.state?`, ${c.state}`:""}{c.phone&&<span style={{color:"#FFD100",opacity:0.6,marginLeft:8}}>{c.phone}</span>}</div>
+                    {isSel&&c.notes&&<div style={{fontSize:10,color:"#555",marginTop:3,fontStyle:"italic"}}>{c.notes.slice(0,80)}{c.notes.length>80?"…":""}</div>}
+                    {isSel&&c.contact&&<div style={{fontSize:10,color:"#4a9eff",marginTop:2}}>Contact: {c.contact}</div>}
+                  </div>;
+                })}
+              </div>;
+            })}
+            {filtered.length===0&&<div style={{padding:40,textAlign:"center",color:"#333",fontSize:13}}>No companies match</div>}
+          </div>
+          {/* Footer stats */}
+          <div style={{borderTop:"1px solid #1a1a1a",padding:"8px 14px",display:"flex",gap:14,justifyContent:"center"}}>
+            {Object.entries(DAY_CONFIG).map(([day,dc])=>(
+              <div key={day} style={{textAlign:"center"}}>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,color:dc.color}}>{companies.filter(c=>c.day===day).length}</div>
+                <div style={{fontSize:8,color:dc.border,fontFamily:"monospace",letterSpacing:1}}>{dc.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Map */}
+        <div style={{flex:1,position:"relative"}}>
+          <div ref={mapRef} style={{width:"100%",height:"100%"}}/>
+          {!mapLoaded&&<div style={{position:"absolute",inset:0,background:"#0a0a0a",display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{color:"#FFD100",fontFamily:"'Bebas Neue',sans-serif",fontSize:20,letterSpacing:3}}>LOADING MAP...</div></div>}
+
+          {/* Selected card */}
+          {selected&&(()=>{const dc=DAY_CONFIG[selected.day]||DAY_CONFIG.Monday;return(
+            <div style={{position:"absolute",bottom:20,right:20,background:"#111",border:`1px solid ${dc.color}`,borderRadius:10,padding:"14px 18px",minWidth:240,maxWidth:300,boxShadow:`0 0 20px ${dc.color}33`,zIndex:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                <div style={{fontSize:9,fontFamily:"monospace",letterSpacing:2,color:dc.color}}>{dc.label} · {selected.type}</div>
+                <div style={{display:"flex",gap:6}}>
+                  <button onClick={()=>setModal(selected)} style={{background:"#1a1a1a",border:"1px solid #333",borderRadius:4,color:"#888",cursor:"pointer",fontSize:10,padding:"2px 8px"}}>Edit</button>
+                  <button onClick={()=>setSelected(null)} style={{background:"none",border:"none",color:"#555",cursor:"pointer",fontSize:16,lineHeight:1}}>×</button>
+                </div>
+              </div>
+              <div style={{fontWeight:700,fontSize:15,color:"#f5f5f5",marginBottom:3}}>{selected.name}</div>
+              <div style={{fontSize:11,color:"#666",marginBottom:6}}>{selected.town}, {selected.state}</div>
+              {selected.phone&&<div style={{fontSize:12,color:"#FFD100",marginBottom:4}}>{selected.phone}</div>}
+              {selected.contact&&<div style={{fontSize:11,color:"#4a9eff",marginBottom:4}}>Contact: {selected.contact}</div>}
+              {selected.notes&&<div style={{fontSize:10,color:"#555",fontStyle:"italic",marginBottom:10}}>{selected.notes.slice(0,100)}{selected.notes.length>100?"…":""}</div>}
+              {selected.website&&<a href={selected.website} target="_blank" rel="noreferrer" style={{fontSize:10,color:"#4a9eff",textDecoration:"none",display:"block",marginBottom:10,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🌐 {selected.website}</a>}
+              {/* Navigation buttons */}
+              {(selected.lat&&selected.lng)&&(
+                <div style={{display:"flex",gap:6,marginBottom:10}}>
+                  <a href={`https://waze.com/ul?ll=${selected.lat},${selected.lng}&navigate=yes`} target="_blank" rel="noreferrer"
+                    style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"7px 10px",background:"#05c8f7",borderRadius:6,color:"#0a0a0a",fontWeight:700,fontSize:11,textDecoration:"none",letterSpacing:0.5}}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20.54 6.63C19.38 4.41 17.39 2.75 15 2.18V2a3 3 0 0 0-6 0v.18C6.61 2.75 4.62 4.41 3.46 6.63A10.86 10.86 0 0 0 2 12c0 6.08 4.92 11 11 11s11-4.92 11-11c0-1.9-.5-3.78-1.46-5.37zM13 2a1 1 0 0 1 2 0v.08A10.93 10.93 0 0 0 13 2h-.04zm-2 0a1 1 0 0 1 2 0 10.93 10.93 0 0 0-2 .08V2zm1 19c-4.97 0-9-4.03-9-9 0-4.97 4.03-9 9-9s9 4.03 9 9c0 4.97-4.03 9-9 9z"/></svg>
+                    Waze
+                  </a>
+                  <a href={`https://maps.google.com/?q=${selected.lat},${selected.lng}`} target="_blank" rel="noreferrer"
+                    style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"7px 10px",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:"#888",fontWeight:600,fontSize:11,textDecoration:"none",letterSpacing:0.5}}>
+                    🗺 Maps
+                  </a>
+                </div>
+              )}
+              {/* If no coords but has town — show address-based Waze link */}
+              {(!selected.lat||!selected.lng)&&selected.town&&(
+                <div style={{marginBottom:10}}>
+                  <a href={`https://waze.com/ul?q=${encodeURIComponent(selected.name+', '+selected.town+', '+selected.state)}&navigate=yes`} target="_blank" rel="noreferrer"
+                    style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"7px 10px",background:"#05c8f7",borderRadius:6,color:"#0a0a0a",fontWeight:700,fontSize:11,textDecoration:"none",letterSpacing:0.5}}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20.54 6.63C19.38 4.41 17.39 2.75 15 2.18V2a3 3 0 0 0-6 0v.18C6.61 2.75 4.62 4.41 3.46 6.63A10.86 10.86 0 0 0 2 12c0 6.08 4.92 11 11 11s11-4.92 11-11c0-1.9-.5-3.78-1.46-5.37zM13 2a1 1 0 0 1 2 0v.08A10.93 10.93 0 0 0 13 2h-.04zm-2 0a1 1 0 0 1 2 0 10.93 10.93 0 0 0-2 .08V2zm1 19c-4.97 0-9-4.03-9-9 0-4.97 4.03-9 9-9s9 4.03 9 9c0 4.97-4.03 9-9 9z"/></svg>
+                    Navigate in Waze
+                  </a>
+                </div>
+              )}
+              <div style={{display:"flex",gap:6}}>
+                <span style={{fontSize:9,padding:"2px 7px",borderRadius:3,background:dc.bg,border:`1px solid ${dc.border}`,color:dc.color,fontFamily:"monospace"}}>{dc.label}</span>
+                <span style={{fontSize:9,padding:"2px 7px",borderRadius:3,background:"#1a1600",border:`1px solid ${PRIORITY_COLORS_MAP[selected.priority]}`,color:PRIORITY_COLORS_MAP[selected.priority],fontFamily:"monospace"}}>{selected.priority?.toUpperCase()}</span>
+              </div>
+            </div>
+          );})()}
+
+          {/* Legend */}
+          <div style={{position:"absolute",top:14,right:14,background:"rgba(10,10,10,0.92)",border:"1px solid #1e1e1e",borderRadius:8,padding:"10px 14px",zIndex:10}}>
+            <div style={{fontSize:8,color:"#333",fontFamily:"monospace",letterSpacing:2,marginBottom:6}}>ROUTE DAYS</div>
+            {Object.entries(DAY_CONFIG).map(([day,dc])=>(
+              <div key={day} style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}>
+                <div style={{width:8,height:8,borderRadius:"50%",background:dc.color,boxShadow:`0 0 5px ${dc.color}`}}/>
+                <span style={{fontSize:10,color:dc.color,fontFamily:"monospace"}}>{dc.label}</span>
+                <span style={{fontSize:9,color:"#444"}}>{dc.desc}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Add/Edit Modal */}
+      {modal&&<CompanyModal company={modal==="add"?null:modal} onClose={()=>setModal(null)} onSave={saveCompany} saving={saving}/>}
+    </div>
+  );
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  UNIFIED APP SHELL
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+export default function App() {
+  const [view, setView] = useState("bids");
+
+  const NAV_ITEMS = [
+    { id: "bids", label: "BID INTELLIGENCE", icon: "📋" },
+    { id: "map",  label: "TERRITORY MAP",    icon: "🗺" },
+  ];
+
+  return (
+    <div style={{ minHeight:"100vh", background:"#0a0a0a", fontFamily:"'DM Sans','Segoe UI',sans-serif", color:"#f5f5f5" }}>
+      <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+
+      {/* ── Global Nav Bar ── */}
+      <div style={{
+        background:"#0f0f0f",
+        borderBottom:"1px solid #1e1e1e",
+        padding:"0 32px",
+        display:"flex",
+        alignItems:"stretch",
+        height:54,
+        position:"sticky",
+        top:0,
+        zIndex:999,
+      }}>
+        {/* Logo */}
+        <div style={{ display:"flex", alignItems:"center", gap:12, marginRight:32, paddingRight:32, borderRight:"1px solid #1e1e1e" }}>
+          <span style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:24, letterSpacing:4, color:"#FFD100" }}>
+            EQUIPMENTSHARE
+          </span>
+          <span style={{ color:"#2a2a00", fontSize:10, letterSpacing:2, fontFamily:"monospace" }}>
+            WESTERN CT · MA
+          </span>
+        </div>
+
+        {/* Nav tabs */}
+        <div style={{ display:"flex", alignItems:"stretch", gap:4 }}>
+          {NAV_ITEMS.map(item => {
+            const active = view === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setView(item.id)}
+                style={{
+                  background:"none",
+                  border:"none",
+                  borderBottom: active ? "2px solid #FFD100" : "2px solid transparent",
+                  color: active ? "#FFD100" : "#555",
+                  cursor:"pointer",
+                  padding:"0 20px",
+                  fontSize:11,
+                  fontWeight:700,
+                  letterSpacing:2,
+                  fontFamily:"monospace",
+                  display:"flex",
+                  alignItems:"center",
+                  gap:8,
+                  transition:"all 0.15s",
+                }}
+                onMouseEnter={e => { if(!active) e.currentTarget.style.color = "#999"; }}
+                onMouseLeave={e => { if(!active) e.currentTarget.style.color = "#555"; }}
+              >
+                <span style={{ fontSize:14 }}>{item.icon}</span>
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Right side — version tag */}
+        <div style={{ marginLeft:"auto", display:"flex", alignItems:"center" }}>
+          <span style={{ fontSize:9, color:"#222", fontFamily:"monospace", letterSpacing:1 }}>
+            DRIX · TERRITORY DASHBOARD v2
+          </span>
+        </div>
+      </div>
+
+      {/* ── View Content ── */}
+      <div style={{ display: view === "bids" ? "block" : "none" }}>
+        <BidTracker />
+      </div>
+      <div style={{ display: view === "map" ? "block" : "none" }}>
+        <TerritoryMap />
+      </div>
     </div>
   );
 }
