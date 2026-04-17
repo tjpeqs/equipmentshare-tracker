@@ -690,9 +690,44 @@ function TerritoryMap() {
   const [search, setSearch]       = useState("");
   const [selected, setSelected]   = useState(null);
   const [modal, setModal]         = useState(null); // null | "add" | company obj
-  const mapRef  = useRef(null);
   const mapObj  = useRef(null);
   const markers = useRef([]);
+  const mapRef  = useCallback(node => {
+    if (!node || mapObj.current) return;
+    const initLeaflet = () => {
+      if (!window.L) { setTimeout(initLeaflet, 50); return; }
+      if (mapObj.current) return;
+      node.style.height = (window.innerHeight - 114) + "px";
+      const map = window.L.map(node, { center:[42.05,-73.15], zoom:8, zoomControl:true });
+      window.L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        attribution:'&copy; CARTO', maxZoom:19,
+      }).addTo(map);
+      mapObj.current = map;
+      setTimeout(() => map.invalidateSize(), 200);
+    };
+    // Load CSS
+    if (!document.getElementById("leaflet-css")) {
+      const link = document.createElement("link");
+      link.id = "leaflet-css";
+      link.rel = "stylesheet";
+      link.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
+      document.head.appendChild(link);
+    }
+    // Load JS
+    if (!window.L) {
+      if (!document.getElementById("leaflet-js")) {
+        const s = document.createElement("script");
+        s.id = "leaflet-js";
+        s.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+        s.onload = initLeaflet;
+        document.head.appendChild(s);
+      } else {
+        setTimeout(initLeaflet, 50);
+      }
+    } else {
+      initLeaflet();
+    }
+  }, []);
 
   // ── Load companies from Supabase ──────────────────────────────────────
   const loadCompanies = useCallback(async () => {
@@ -776,40 +811,7 @@ function TerritoryMap() {
     return true;
   });
 
-  // ── Leaflet Map ───────────────────────────────────────────────────────
-  useEffect(() => {
-    if (mapObj.current || !mapRef.current) return;
-    // Load Leaflet CSS
-    if (!document.getElementById("leaflet-css")) {
-      const link = document.createElement("link");
-      link.id = "leaflet-css";
-      link.rel = "stylesheet";
-      link.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
-      document.head.appendChild(link);
-    }
-    // Load Leaflet JS
-    const initMap = () => {
-      if (mapObj.current || !mapRef.current) return;
-      mapRef.current.style.height = (window.innerHeight - 114) + "px";
-      mapRef.current.style.width = "100%";
-      const map = window.L.map(mapRef.current, { center:[42.05,-73.15], zoom:8, zoomControl:true });
-      window.L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-        attribution:'&copy; <a href="https://carto.com/">CARTO</a>',
-        maxZoom:19,
-      }).addTo(map);
-      mapObj.current = map;
-      map.invalidateSize();
-    };
-    const loadLeaflet = () => {
-      if (window.L) { setTimeout(initMap, 100); return; }
-      const s = document.createElement("script");
-      s.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
-      s.onload = () => setTimeout(initMap, 100);
-      document.head.appendChild(s);
-    };
-    loadLeaflet();
-    return () => {};
-  }, []);
+
 
   useEffect(() => {
     if (!mapObj.current || !window.L) return;
