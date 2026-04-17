@@ -788,23 +788,24 @@ function TerritoryMap() {
       document.head.appendChild(link);
     }
     // Load Leaflet JS
-    const loadLeaflet = () => {
-      if (window.L) { initMap(); return; }
-      const s = document.createElement("script");
-      s.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
-      s.onload = initMap;
-      document.head.appendChild(s);
-    };
     const initMap = () => {
       if (mapObj.current || !mapRef.current) return;
-      // Force a reflow so the div has dimensions
       mapRef.current.style.height = (window.innerHeight - 114) + "px";
+      mapRef.current.style.width = "100%";
       const map = window.L.map(mapRef.current, { center:[42.05,-73.15], zoom:8, zoomControl:true });
       window.L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
         attribution:'&copy; <a href="https://carto.com/">CARTO</a>',
         maxZoom:19,
       }).addTo(map);
       mapObj.current = map;
+      map.invalidateSize();
+    };
+    const loadLeaflet = () => {
+      if (window.L) { setTimeout(initMap, 100); return; }
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+      s.onload = () => setTimeout(initMap, 100);
+      document.head.appendChild(s);
     };
     loadLeaflet();
     return () => {};
