@@ -784,7 +784,7 @@ function TerritoryMap() {
     if (document.getElementById("gmaps-script")) return;
     const s = document.createElement("script");
     s.id = "gmaps-script";
-    s.src = "https://maps.googleapis.com/maps/api/js?key=AIzaSyB41DRUbKWJHPxaFjMAwdrzWzbVKartNBY&callback=gmapReady";
+    s.src = "https://maps.googleapis.com/maps/api/js?key=AIzaSyDWtNhw_VfRa3bH6-9N35As9BBy-48YIIo&callback=gmapReady";
     s.async = true;
     window.gmapReady = () => setMapLoaded(true);
     document.head.appendChild(s);
