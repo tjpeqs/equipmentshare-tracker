@@ -725,6 +725,11 @@ function TerritoryMap() {
       ).addTo(map);
 
       leafletRef.current = { map, markerGroup: L.layerGroup().addTo(map) };
+      window._leafletMap = map;
+      // Force full render after a tick
+      setTimeout(() => { map.invalidateSize(true); }, 100);
+      setTimeout(() => { map.invalidateSize(true); }, 500);
+      setTimeout(() => { map.invalidateSize(true); }, 1200);
     }
 
     // Load CSS
