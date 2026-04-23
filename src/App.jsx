@@ -689,6 +689,7 @@ function TerritoryMap() {
   const [search, setSearch]         = useState("");
   const [selected, setSelected]     = useState(null);
   const [modal, setModal]           = useState(null);
+  const [mapReady, setMapReady] = useState(false);
   const mapDivRef  = useRef(null);
   const leafletRef = useRef(null); // holds { map, markers }
   const cssReadyRef = useRef(false);
@@ -730,6 +731,8 @@ function TerritoryMap() {
       setTimeout(() => { map.invalidateSize(true); }, 100);
       setTimeout(() => { map.invalidateSize(true); }, 500);
       setTimeout(() => { map.invalidateSize(true); }, 1200);
+      // Trigger re-render so marker useEffect fires after map is ready
+      setMapReady(true);
     }
 
     // Load CSS
@@ -776,7 +779,7 @@ function TerritoryMap() {
 
   // ── 2. Re-render markers whenever data or filters change ─────────────────
   useEffect(() => {
-    if (!leafletRef.current) return;
+    if (!mapReady || !leafletRef.current) return;
     const { map, markerGroup } = leafletRef.current;
     const L = window.L;
     if (!L) return;
@@ -829,7 +832,7 @@ function TerritoryMap() {
 
     // Invalidate size in case container resized
     setTimeout(() => map.invalidateSize(), 50);
-  }, [companies, activeDay, activeType, search]);
+  }, [companies, activeDay, activeType, search, mapReady]);
 
   // ── 3. Load companies ────────────────────────────────────────────────────
   useEffect(() => {
