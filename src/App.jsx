@@ -749,14 +749,24 @@ function TerritoryMap() {
       script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
       script.onload = () => {
         if (cssReadyRef.current) initMap();
+        else setTimeout(initMap, 200);
       };
       document.head.appendChild(script);
-    } else if (window.L && cssReadyRef.current) {
-      // Both already loaded (hot-reload scenario)
+    } else if (window.L) {
       setTimeout(initMap, 0);
     }
 
-    return () => { cancelled = true; };
+    // Fallback poll — if onload events missed, retry until map appears
+    const poll = setInterval(() => {
+      if (cancelled) { clearInterval(poll); return; }
+      if (window.L && mapDivRef.current && !leafletRef.current) {
+        cssReadyRef.current = true;
+        initMap();
+      }
+      if (leafletRef.current) clearInterval(poll);
+    }, 300);
+
+    return () => { cancelled = true; clearInterval(poll); };
   }, []);
 
   // ── 2. Re-render markers whenever data or filters change ─────────────────
