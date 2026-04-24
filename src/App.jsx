@@ -1149,6 +1149,306 @@ function LoginScreen() {
   );
 }
 
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  ACTIVITY LOG  (Google Calendar sync + Share to Manager)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function ActivityLog() {
+  const [weekOffset, setWeekOffset]   = useState(0); // 0 = current week
+  const [events, setEvents]           = useState({}); // { "2026-04-24": [{title, description, start, end}] }
+  const [reports, setReports]         = useState([]); // submitted reports from Supabase
+  const [allReports, setAllReports]   = useState([]); // manager view
+  const [isManager, setIsManager]     = useState(false);
+  const [loading, setLoading]         = useState(true);
+  const [syncing, setSyncing]         = useState(false);
+  const [sharing, setSharing]         = useState(null); // date being shared
+  const [filterRep, setFilterRep]     = useState("All");
+  const [calError, setCalError]       = useState(null);
+
+  // ── Get week dates ───────────────────────────────────────────
+  const getWeekDates = (offset = 0) => {
+    const today = new Date();
+    const day = today.getDay(); // 0=Sun
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - (day === 0 ? 6 : day - 1) + offset * 7);
+    return Array.from({length: 7}, (_, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      return d;
+    });
+  };
+
+  const weekDates = getWeekDates(weekOffset);
+  const todayStr = new Date().toISOString().split("T")[0];
+  const DAY_NAMES = ["MON","TUE","WED","THU","FRI","SAT","SUN"];
+
+  const fmtDate = (d) => d.toISOString().split("T")[0];
+  const fmtDisplay = (d) => d.toLocaleDateString("en-US", {month:"short", day:"numeric"});
+  const fmtTime = (iso) => {
+    if (!iso) return "";
+    try {
+      return new Date(iso).toLocaleTimeString("en-US", {hour:"numeric", minute:"2-digit", hour12:true});
+    } catch { return ""; }
+  };
+
+  // ── Check if manager ─────────────────────────────────────────
+  useEffect(() => {
+    const uid = getUserId();
+    if (!uid) return;
+    fetch(`${SUPABASE_URL}/rest/v1/user_settings?user_id=eq.${uid}&key=eq.role&select=value`, {
+      headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY}`}
+    })
+    .then(r => r.json())
+    .then(d => { if (d?.[0]?.value === "manager") setIsManager(true); })
+    .catch(() => {});
+  }, []);
+
+  // ── Load submitted reports ────────────────────────────────────
+  const loadReports = async () => {
+    const session = JSON.parse(localStorage.getItem("sb_session") || "{}");
+    const token = session.access_token || SUPABASE_KEY;
+    const uid = getUserId();
+
+    // Own reports
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/daily_reports?user_id=eq.${uid}&order=report_date.desc&limit=90`, {
+      headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`}
+    });
+    const d = await r.json();
+    setReports(Array.isArray(d) ? d : []);
+
+    // Manager: all reports
+    if (isManager) {
+      const r2 = await fetch(`${SUPABASE_URL}/rest/v1/daily_reports?order=report_date.desc&limit=500`, {
+        headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`}
+      });
+      const d2 = await r2.json();
+      setAllReports(Array.isArray(d2) ? d2 : []);
+    }
+  };
+
+  useEffect(() => {
+    loadReports().finally(() => setLoading(false));
+  }, [isManager]);
+
+  // ── Sync Google Calendar ──────────────────────────────────────
+  const syncCalendar = async () => {
+    setSyncing(true);
+    setCalError(null);
+    const session = JSON.parse(localStorage.getItem("sb_session") || "{}");
+    const token = session.provider_token || session.access_token;
+
+    if (!token) {
+      setCalError("No Google token found. Please sign out and sign back in.");
+      setSyncing(false);
+      return;
+    }
+
+    try {
+      const start = fmtDate(weekDates[0]) + "T00:00:00Z";
+      const end   = fmtDate(weekDates[6]) + "T23:59:59Z";
+      const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${start}&timeMax=${end}&singleEvents=true&orderBy=startTime&maxResults=100`;
+
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error?.message || "Calendar sync failed");
+      }
+      const data = await res.json();
+      const grouped = {};
+      (data.items || []).forEach(ev => {
+        const dateStr = (ev.start?.dateTime || ev.start?.date || "").split("T")[0];
+        if (!dateStr) return;
+        if (!grouped[dateStr]) grouped[dateStr] = [];
+        grouped[dateStr].push({
+          id: ev.id,
+          title: ev.summary || "Untitled",
+          description: ev.description || "",
+          start: ev.start?.dateTime || ev.start?.date,
+          end: ev.end?.dateTime || ev.end?.date,
+          allDay: !!ev.start?.date && !ev.start?.dateTime,
+        });
+      });
+      setEvents(prev => ({...prev, ...grouped}));
+    } catch(e) {
+      setCalError(e.message);
+    }
+    setSyncing(false);
+  };
+
+  useEffect(() => { syncCalendar(); }, [weekOffset]);
+
+  // ── Share day to manager ──────────────────────────────────────
+  const shareDay = async (dateStr) => {
+    setSharing(dateStr);
+    const session = JSON.parse(localStorage.getItem("sb_session") || "{}");
+    const token = session.access_token || SUPABASE_KEY;
+    const uid = getUserId();
+    const stops = (events[dateStr] || []).map(ev => ({
+      title: ev.title,
+      description: ev.description,
+      time: fmtTime(ev.start),
+    }));
+
+    // Get rep name from session
+    let repName = "Rep";
+    let repEmail = "";
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      repEmail = payload.email || "";
+      repName = payload.user_metadata?.full_name || repEmail.split("@")[0] || "Rep";
+    } catch {}
+
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/daily_reports`, {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "Prefer": "resolution=merge-duplicates,return=minimal"
+        },
+        body: JSON.stringify({
+          user_id: uid,
+          rep_name: repName,
+          rep_email: repEmail,
+          report_date: dateStr,
+          stops: stops,
+          notes: `${stops.length} stops logged`,
+        })
+      });
+      await loadReports();
+    } catch(e) { alert("Share failed: " + e.message); }
+    setSharing(null);
+  };
+
+  // ── Is this date already shared? ─────────────────────────────
+  const isShared = (dateStr) => reports.some(r => r.report_date === dateStr);
+
+  // ── Manager: unique reps ──────────────────────────────────────
+  const repList = ["All", ...new Set(allReports.map(r => r.rep_name))];
+
+  const filteredReports = isManager
+    ? (filterRep === "All" ? allReports : allReports.filter(r => r.rep_name === filterRep))
+    : reports;
+
+  if (loading) return (
+    <div style={{height:"calc(100vh - 54px)",background:"#0a0a0a",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{color:"#e8e8e8",fontFamily:"'Bebas Neue',sans-serif",fontSize:24,letterSpacing:3}}>LOADING...</div>
+    </div>
+  );
+
+  return (
+    <div style={{background:"#0a0a0a",color:"#f5f5f5",fontFamily:"'DM Sans',sans-serif",minHeight:"calc(100vh - 54px)"}}>
+
+      {/* ── Header bar ── */}
+      <div style={{background:"#0d0d0d",borderBottom:"1px solid #1a1a1a",padding:"10px 24px",display:"flex",alignItems:"center",gap:16}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,letterSpacing:3,color:"#e8e8e8"}}>ACTIVITY LOG</div>
+        <div style={{fontSize:10,color:"#444",fontFamily:"monospace",letterSpacing:2}}>GOOGLE CALENDAR SYNC</div>
+
+        <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
+          {calError && <span style={{fontSize:10,color:"#cc2222",fontFamily:"monospace"}}>{calError}</span>}
+          <button onClick={()=>setWeekOffset(0)} style={{padding:"5px 12px",background:weekOffset===0?"#1a1a1a":"transparent",border:"1px solid #2a2a2a",borderRadius:5,color:weekOffset===0?"#e8e8e8":"#555",cursor:"pointer",fontSize:11,fontFamily:"monospace"}}>TODAY</button>
+          <button onClick={()=>setWeekOffset(w=>w-1)} style={{padding:"5px 10px",background:"transparent",border:"1px solid #2a2a2a",borderRadius:5,color:"#555",cursor:"pointer",fontSize:13}}>‹</button>
+          <span style={{fontSize:11,color:"#444",fontFamily:"monospace",minWidth:160,textAlign:"center"}}>
+            {fmtDisplay(weekDates[0])} – {fmtDisplay(weekDates[6])}
+          </span>
+          <button onClick={()=>setWeekOffset(w=>w+1)} style={{padding:"5px 10px",background:"transparent",border:"1px solid #2a2a2a",borderRadius:5,color:"#555",cursor:"pointer",fontSize:13}}>›</button>
+          <button onClick={syncCalendar} disabled={syncing} style={{padding:"5px 14px",background:"#1a1a1a",border:"1px solid #333",borderRadius:5,color:syncing?"#444":"#e8e8e8",cursor:syncing?"wait":"pointer",fontSize:11,fontFamily:"monospace",letterSpacing:1}}>
+            {syncing?"SYNCING...":"⟳ SYNC"}
+          </button>
+        </div>
+      </div>
+
+      <div style={{display:"flex",gap:0}}>
+
+        {/* ── Weekly calendar ── */}
+        <div style={{flex:1,padding:"20px 24px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:10}}>
+            {weekDates.map((date, i) => {
+              const ds = fmtDate(date);
+              const isToday = ds === todayStr;
+              const dayEvents = events[ds] || [];
+              const shared = isShared(ds);
+              const isPast = date < new Date() && !isToday;
+
+              return (
+                <div key={ds} style={{background:isToday?"#111":"#0d0d0d",border:`1px solid ${isToday?"#cc2222":"#1a1a1a"}`,borderRadius:8,padding:"12px 10px",minHeight:180}}>
+                  {/* Day header */}
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                    <div>
+                      <div style={{fontSize:9,color:isToday?"#cc2222":"#444",fontFamily:"monospace",letterSpacing:2}}>{DAY_NAMES[i]}</div>
+                      <div style={{fontSize:18,fontFamily:"'Bebas Neue',sans-serif",color:isToday?"#e8e8e8":"#555",letterSpacing:1}}>{date.getDate()}</div>
+                    </div>
+                    {dayEvents.length > 0 && (
+                      <button
+                        onClick={() => shareDay(ds)}
+                        disabled={sharing===ds}
+                        style={{fontSize:8,padding:"3px 7px",background:shared?"#0a1a0a":"#1a0a0a",border:`1px solid ${shared?"#2a6a2a":"#cc2222"}`,borderRadius:4,color:shared?"#4a9a4a":"#cc2222",cursor:sharing===ds?"wait":"pointer",fontFamily:"monospace",letterSpacing:0.5}}>
+                        {sharing===ds?"...":shared?"✓ SHARED":"SHARE"}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Events */}
+                  {dayEvents.length === 0 ? (
+                    <div style={{fontSize:10,color:"#252525",textAlign:"center",marginTop:20,fontFamily:"monospace"}}>—</div>
+                  ) : (
+                    dayEvents.map((ev, j) => (
+                      <div key={j} style={{marginBottom:8,padding:"6px 8px",background:"#111",border:"1px solid #1e1e1e",borderLeft:`3px solid ${isToday?"#cc2222":"#333"}`,borderRadius:4}}>
+                        <div style={{fontSize:11,fontWeight:600,color:"#e8e8e8",marginBottom:2}}>{ev.title}</div>
+                        {!ev.allDay && <div style={{fontSize:9,color:"#555",fontFamily:"monospace",marginBottom:3}}>{fmtTime(ev.start)}{ev.end?" – "+fmtTime(ev.end):""}</div>}
+                        {ev.description && <div style={{fontSize:10,color:"#666",lineHeight:1.4}}>{ev.description.slice(0,80)}{ev.description.length>80?"…":""}</div>}
+                      </div>
+                    ))
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Submitted reports sidebar ── */}
+        <div style={{width:320,background:"#0d0d0d",borderLeft:"1px solid #1a1a1a",display:"flex",flexDirection:"column"}}>
+          <div style={{padding:"12px 16px",borderBottom:"1px solid #1a1a1a",display:"flex",alignItems:"center",gap:8}}>
+            <div style={{fontSize:10,color:"#555",fontFamily:"monospace",letterSpacing:2,flex:1}}>
+              {isManager ? "ALL REP REPORTS" : "SUBMITTED REPORTS"}
+            </div>
+            {isManager && (
+              <select value={filterRep} onChange={e=>setFilterRep(e.target.value)}
+                style={{background:"#111",border:"1px solid #222",borderRadius:4,color:"#888",fontSize:10,padding:"3px 6px",fontFamily:"monospace"}}>
+                {repList.map(r=><option key={r} value={r}>{r}</option>)}
+              </select>
+            )}
+          </div>
+
+          <div style={{overflowY:"auto",flex:1}}>
+            {filteredReports.length === 0 ? (
+              <div style={{padding:24,fontSize:11,color:"#333",fontFamily:"monospace",textAlign:"center"}}>No reports yet</div>
+            ) : (
+              filteredReports.map(rep => (
+                <div key={rep.id} style={{padding:"12px 16px",borderBottom:"1px solid #141414"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                    <div style={{fontSize:11,fontWeight:600,color:"#e8e8e8"}}>{rep.report_date}</div>
+                    {isManager && <div style={{fontSize:9,color:"#cc2222",fontFamily:"monospace",letterSpacing:1}}>{rep.rep_name}</div>}
+                    <div style={{marginLeft:"auto",fontSize:9,color:"#333",fontFamily:"monospace"}}>{(rep.stops||[]).length} stops</div>
+                  </div>
+                  {(rep.stops||[]).map((stop, i) => (
+                    <div key={i} style={{marginBottom:4,paddingLeft:8,borderLeft:"2px solid #1e1e1e"}}>
+                      <div style={{fontSize:11,color:"#aaa"}}>{stop.title}</div>
+                      {stop.time && <div style={{fontSize:9,color:"#444",fontFamily:"monospace"}}>{stop.time}</div>}
+                      {stop.description && <div style={{fontSize:10,color:"#555",marginTop:1}}>{stop.description.slice(0,60)}{stop.description.length>60?"…":""}</div>}
+                    </div>
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState("bids");
   const [session, setSession] = useState(() => getSession());
@@ -1167,6 +1467,7 @@ export default function App() {
   const NAV_ITEMS = [
     { id: "bids", label: "BID INTELLIGENCE", icon: "📋" },
     { id: "map",  label: "TERRITORY MAP",    icon: "🗺" },
+    { id: "log",  label: "ACTIVITY LOG",      icon: "📅" },
   ];
 
   return (
@@ -1259,6 +1560,9 @@ export default function App() {
       </div>
       <div style={{ display: view === "map" ? "block" : "none" }}>
         <TerritoryMap />
+      </div>
+      <div style={{ display: view === "log" ? "block" : "none" }}>
+        <ActivityLog />
       </div>
     </div>
   );
