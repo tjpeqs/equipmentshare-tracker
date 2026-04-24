@@ -1183,12 +1183,25 @@ export default function App() {
       }}>
         {/* Logo */}
         <div style={{ display:"flex", alignItems:"center", gap:12, marginRight:32, paddingRight:32, borderRight:"1px solid #1e1e1e" }}>
-          <span style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:24, letterSpacing:4, color:"#ffffff" }}>
-            REPROUTE
-          </span>
-          <span style={{ color:"#555", fontSize:10, letterSpacing:2, fontFamily:"monospace" }}>
-            WESTERN CT · MA
-          </span>
+          {/* SVG Logo */}
+          <svg width="160" height="44" viewBox="0 0 160 44" style={{display:"block",flexShrink:0}}>
+            {/* Route path */}
+            <circle cx="10" cy="14" r="7" fill="#cc2222"/>
+            <circle cx="10" cy="14" r="3" fill="#0a0a0a"/>
+            <line x1="10" y1="21" x2="10" y2="28" stroke="#cc2222" strokeWidth="1.5"/>
+            <line x1="10" y1="28" x2="28" y2="28" stroke="#333" strokeWidth="1.5"/>
+            <circle cx="28" cy="28" r="2.5" fill="#444"/>
+            <line x1="28" y1="28" x2="42" y2="20" stroke="#333" strokeWidth="1.5"/>
+            <circle cx="42" cy="20" r="2.5" fill="#444"/>
+            <line x1="42" y1="20" x2="56" y2="28" stroke="#333" strokeWidth="1.5"/>
+            <circle cx="56" cy="28" r="2.5" fill="#444"/>
+            <line x1="56" y1="28" x2="68" y2="22" stroke="#cc2222" strokeWidth="1.8"/>
+            <circle cx="68" cy="22" r="3" fill="#cc2222"/>
+            <circle cx="68" cy="22" r="1.5" fill="#0a0a0a"/>
+            {/* Wordmark */}
+            <text x="78" y="20" style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,letterSpacing:2,fill:"#f0f0f0"}}>REP<tspan style={{fill:"#cc2222"}}>ROUTE</tspan></text>
+            <text x="78" y="32" style={{fontFamily:"monospace",fontSize:7,letterSpacing:2,fill:"#555"}}>FIELD SALES · ROUTE INTELLIGENCE</text>
+          </svg>
         </div>
 
         {/* Nav tabs */}
