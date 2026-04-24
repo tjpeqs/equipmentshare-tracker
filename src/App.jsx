@@ -32,6 +32,15 @@ async function signOut() {
   window.location.reload();
 }
 
+function getUserId() {
+  const session = JSON.parse(localStorage.getItem("sb_session") || "null");
+  if (!session?.access_token) return null;
+  try {
+    const payload = JSON.parse(atob(session.access_token.split('.')[1]));
+    return payload.sub;
+  } catch { return null; }
+}
+
 function getSession() {
   // Check URL hash for token (after Google redirect)
   const hash = window.location.hash;
@@ -55,11 +64,13 @@ function getSession() {
 // ── Supabase config (defined at top of file) ─────────────────────────────────
 
 async function sbFetch(path, options = {}) {
+  const session = JSON.parse(localStorage.getItem("sb_session") || "null");
+  const token = session?.access_token || SUPABASE_KEY;
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
     ...options,
     headers: {
       "apikey": SUPABASE_KEY,
-      "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "Authorization": `Bearer ${token}`,
       "Content-Type": "application/json",
       "Prefer": options.prefer || "return=representation",
       ...(options.headers || {}),
@@ -98,6 +109,7 @@ function fromDB(r) {
 // Convert app camelCase → DB snake_case
 function toDB(b) {
   return {
+    user_id:    getUserId(),
     project:    b.project,
     owner:      b.owner,
     gc:         b.gc,
@@ -310,7 +322,7 @@ function BidTracker() {
   const loadBids = useCallback(async (showLoader=false) => {
     if(showLoader) setLoading(true);
     try {
-      const data = await sbFetch("projects?select=*&order=id.asc&limit=2000");
+      const data = await sbFetch(`projects?select=*&user_id=eq.${getUserId()}&order=id.asc&limit=2000`);
       if(data && data.length > 0) {
         setBids(data.map(fromDB));
         setLastSync(new Date());
@@ -861,7 +873,7 @@ function TerritoryMap() {
 
   // ── 3. Load companies ────────────────────────────────────────────────────
   useEffect(() => {
-    fetch(`${SUPABASE_URL}/rest/v1/companies?select=*&order=id.asc&limit=1000`, {
+    fetch(`${SUPABASE_URL}/rest/v1/companies?select=*&user_id=eq.${getUserId()}&order=id.asc&limit=1000`, {
       headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
     })
     .then(r => r.json())
@@ -890,7 +902,7 @@ function TerritoryMap() {
     let lat = parseFloat(form.lat)||0, lng = parseFloat(form.lng)||0;
     if ((!lat||!lng) && COORDS[form.town]) { lat=COORDS[form.town][0]; lng=COORDS[form.town][1]; }
     const payload = {
-      name:form.name, day:form.day, type:form.type, lat, lng,
+      user_id:getUserId(), name:form.name, day:form.day, type:form.type, lat, lng,
       town:form.town, state:form.state, phone:form.phone,
       notes:form.notes, priority:form.priority,
       website:form.website||null, contact:form.contact||null
