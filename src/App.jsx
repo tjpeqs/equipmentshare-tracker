@@ -273,15 +273,16 @@ function ImportModal({ onClose, onImport, importing }) {
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
       <div style={{background:"#0e0e18",border:"1px solid #2a2a44",borderRadius:12,width:"100%",maxWidth:740,maxHeight:"90vh",overflowY:"auto",padding:32,position:"relative"}}>
         <button onClick={onClose} style={{position:"absolute",top:16,right:20,background:"none",border:"none",color:"#666",fontSize:22,cursor:"pointer"}}>×</button>
-        <h2 style={{color:"#F5F5F5",fontFamily:"'Bebas Neue',sans-serif",fontSize:26,marginBottom:6,letterSpacing:1}}>IMPORT FROM DODGE</h2>
-        <p style={{color:"#555",fontSize:13,marginBottom:20}}>Upload a new Dodge CSV export to add more projects. They save directly to the live database.</p>
+        <h2 style={{color:"#F5F5F5",fontFamily:"'Bebas Neue',sans-serif",fontSize:26,marginBottom:6,letterSpacing:1}}>IMPORT DATA</h2>
+        <p style={{color:"#888",fontSize:11,marginBottom:4,fontFamily:"monospace",letterSpacing:1}}>(Company, Address, Project Data)</p>
+        <p style={{color:"#555",fontSize:13,marginBottom:20}}>Import a CSV from any source — Dodge, eSEARCH, spreadsheets, or your own data. Projects save directly to your live database.</p>
         <div style={{background:"#0f0f0f",border:"1px solid #1e1e38",borderRadius:8,padding:16,marginBottom:20,fontSize:12,color:"#555",fontFamily:"monospace",lineHeight:1.8}}>
           1. Go to <span style={{color:"#7a88cc"}}>construction.com</span> → Search Projects<br/>
           2. Filter: State = CT or MA, your counties, Stage = Bidding + Awarded<br/>
           3. Click <strong style={{color:"#F5F5F5"}}>Export → Download CSV</strong><br/>
           4. Upload below
         </div>
-        <button onClick={()=>fileRef.current.click()} style={{background:"#1a1a1a",border:"1px solid #2a2a44",borderRadius:6,color:"#F5F5F5",padding:"10px 20px",cursor:"pointer",fontSize:13,marginBottom:16}}>📂 Upload Dodge CSV</button>
+        <button onClick={()=>fileRef.current.click()} style={{background:"#1a1a1a",border:"1px solid #2a2a44",borderRadius:6,color:"#F5F5F5",padding:"10px 20px",cursor:"pointer",fontSize:13,marginBottom:16}}>📂 Upload File</button>
         <input ref={fileRef} type="file" accept=".csv,.txt" style={{display:"none"}} onChange={handleFile}/>
         <div>
           <label style={{color:"#888",fontSize:11,letterSpacing:1,display:"block",marginBottom:6,fontFamily:"monospace"}}>OR PASTE CSV TEXT</label>
@@ -328,8 +329,8 @@ function BidTracker() {
         setLastSync(new Date());
         setDbError(null);
       } else if(data && data.length === 0) {
-        // Empty DB — seed it
-        await seedDatabase();
+        // Empty DB for this user — new rep starting fresh
+        setBids([]);
       }
     } catch(e) {
       setDbError(e.message);
@@ -467,7 +468,7 @@ function BidTracker() {
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <button onClick={()=>loadBids(false)} style={{background:"#1a1a1a",border:"1px solid #2a2a44",borderRadius:6,color:"#666",padding:"7px 14px",cursor:"pointer",fontSize:12}}>↻ Refresh</button>
-          <button onClick={()=>setShowImport(true)} style={{background:"#1a1a1a",border:"1px solid #2a2a44",borderRadius:6,color:"#e8e8e8",padding:"8px 16px",cursor:"pointer",fontSize:13,fontWeight:600}}>⬆ Import Dodge CSV</button>
+          <button onClick={()=>setShowImport(true)} style={{background:"#1a1a1a",border:"1px solid #2a2a44",borderRadius:6,color:"#e8e8e8",padding:"8px 16px",cursor:"pointer",fontSize:13,fontWeight:600}}>⬆ Import Data</button>
           <button onClick={()=>setModal("add")} style={{background:"#e8e8e8",border:"none",borderRadius:6,color:"#0a0a0a",padding:"9px 18px",cursor:"pointer",fontSize:13,fontWeight:700}}>+ Add Project</button>
         </div>
       </div>
@@ -547,12 +548,15 @@ function BidTracker() {
               const q=getQuadrant(bid); const qc=QUADRANT_COLORS[q];
               return (
                 <div key={bid.id} onClick={()=>setModal(bid)}
-                  style={{borderBottom:"1px solid #141420",display:"grid",gridTemplateColumns:"3fr 1.1fr 1fr 0.6fr 1fr 1.3fr 24px",gap:16,alignItems:"center",padding:"14px 16px",cursor:"pointer",borderLeft:`3px solid ${isAwd?"#cc6600":PRIORITY_COLORS[bid.priority]}`,background:isAwd?(i%2===0?"#110900":"#140b00"):(i%2===0?"transparent":"#141414"),transition:"background 0.12s"}}
-                  onMouseEnter={e=>e.currentTarget.style.background=isAwd?"#1a1000":"#1f1f1f"}
-                  onMouseLeave={e=>e.currentTarget.style.background=isAwd?(i%2===0?"#110900":"#140b00"):(i%2===0?"transparent":"#141414")}
+                  style={{borderBottom:"1px solid #141420",display:"grid",gridTemplateColumns:"3fr 1.1fr 1fr 0.6fr 1fr 1.3fr 24px",gap:16,alignItems:"center",padding:"14px 16px",cursor:"pointer",borderLeft:`3px solid ${isAwd?"#cc6600":bid.source==="Dodge"||bid.source==="Imported"?"#e8873a":PRIORITY_COLORS[bid.priority]}`,background:isAwd?(i%2===0?"#110900":"#140b00"):bid.source==="Dodge"||bid.source==="Imported"?(i%2===0?"#120a00":"#160c00"):(i%2===0?"transparent":"#141414"),transition:"background 0.12s"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=isAwd?"#1a1000":bid.source==="Dodge"||bid.source==="Imported"?"#1e1000":"#1f1f1f"}
+                  onMouseLeave={e=>e.currentTarget.style.background=isAwd?(i%2===0?"#110900":"#140b00"):bid.source==="Dodge"||bid.source==="Imported"?(i%2===0?"#120a00":"#160c00"):(i%2===0?"transparent":"#141414")}
                 >
                   <div>
-                    <div style={{fontWeight:600,fontSize:13,color:isAwd?"#ffcc44":"#F5F5F5",marginBottom:2}}>{bid.project}</div>
+                    <div style={{fontWeight:600,fontSize:13,color:isAwd?"#ffcc44":"#F5F5F5",marginBottom:2,display:"flex",alignItems:"center",gap:6}}>
+                      {bid.project}
+                      {(bid.source==="Dodge"||bid.source==="Imported")&&<span style={{fontSize:8,padding:"1px 5px",borderRadius:3,background:"#2a1800",border:"1px solid #e8873a",color:"#e8873a",fontFamily:"monospace",letterSpacing:1,flexShrink:0}}>IMPORTED</span>}
+                    </div>
                     <div style={{fontSize:11,color:"#555"}}>{bid.awardedTo?<span>🏆 <span style={{color:"#ffaa00"}}>{bid.awardedTo}</span></span>:bid.gc!=="TBD"?bid.gc:<span style={{color:"#e8e8e8",fontSize:10}}>GC TBD</span>}{" · "}{bid.town}</div>
                     {bid.notes&&<div style={{fontSize:10,color:"#3a3a4a",marginTop:2}}>{bid.notes.slice(0,70)}{bid.notes.length>70?"…":""}</div>}
                   </div>
