@@ -165,7 +165,7 @@ const DAY_ROUTES = {
     towns:["Pittsfield","Lanesborough","Cheshire","Adams","North Adams","Williamstown","Clarksburg","New Ashford","Dalton","Hinsdale","Windsor","Hancock","Lenox","Lee","Stockbridge","Great Barrington","Sheffield","Egremont","Alford","West Stockbridge","New Marlborough","Sandisfield","Otis","Tyringham","Becket","Monterey","Mount Washington","Mill River","Richmond","Savoy","Florida","Berkshire","Springfield","Chicopee","Holyoke","Westfield","Agawam","West Springfield","Longmeadow","East Longmeadow","Ludlow","Wilbraham","Palmer","Hampden","Blandford","Southwick","Monson","Chester","Russell","Granville","Brimfield","Holland","Wales","Tolland","Indian Orchard"] },
   "Wednesday": { label:"WED", fullLabel:"Wednesday", subtitle:"W. + N. Litchfield Loop",        color:"#4ae8a0", bg:"#091a12", border:"#1a6b40",
     towns:["Sharon","Canaan","North Canaan","Norfolk","Colebrook","Hartland","Barkhamsted","Winchester (Winsted)","Winsted","Winchester","Winchestr Ctr","Torrington","Goshen","Cornwall","New Hartford","Harwinton","Litchfield","Salisbury"] },
-  "Thursday":  { label:"THU", fullLabel:"Thursday",  subtitle:"Hartford + 84 Corridor",         color:"#e8c84a", bg:"#1a1600", border:"#6b5200",
+  "Thursday":  { label:"THU", fullLabel:"Thursday",  subtitle:"Hartford + 84 Corridor",         color:"#e8c84a", bg:"#1a1a1a", border:"#6b5200",
     towns:["Thomaston","Plymouth","Bristol","New Britain","Plainville","Southington","Wolcott","Bloomfield","Hartford","Newington","West Hartford","Farmington","Canton","Simsbury","Avon","Granby","Burlington"] },
 };
 function getDay(bid) {
@@ -184,7 +184,7 @@ const STATUS_COLORS = {
   "Won":                   { bg:"#0f2a1a", border:"#1a5c35", text:"#4dcc88" },
   "Lost":                  { bg:"#2a1a1a", border:"#5c2a2a", text:"#cc6666" },
 };
-const PRIORITY_COLORS = { High:"#FFD100", Medium:"#e8a21c", Low:"#5a8a6a" };
+const PRIORITY_COLORS = { High:"#e8e8e8", Medium:"#e8a21c", Low:"#5a8a6a" };
 
 function fmt$(v) { if(!v) return "—"; if(v>=1000000) return `$${(v/1000000).toFixed(1)}M`; return `$${(v/1000).toFixed(0)}K`; }
 function daysUntil(d) { if(!d) return null; return Math.ceil((new Date(d)-new Date())/86400000); }
@@ -243,7 +243,7 @@ function BidModal({ bid, onClose, onSave, saving }) {
         </div>
         <div style={{display:"flex",gap:12,marginTop:24,justifyContent:"flex-end"}}>
           <button onClick={onClose} style={{padding:"10px 24px",background:"none",border:"1px solid #333",borderRadius:6,color:"#888",cursor:"pointer",fontSize:14}}>Cancel</button>
-          <button onClick={()=>onSave({...form,value:Number(form.value),id:form.id})} disabled={saving} style={{padding:"10px 28px",background:isAwd?"#cc6600":"#FFD100",border:"none",borderRadius:6,color:"#0a0a0a",cursor:saving?"wait":"pointer",fontSize:14,fontWeight:700,opacity:saving?0.7:1}}>
+          <button onClick={()=>onSave({...form,value:Number(form.value),id:form.id})} disabled={saving} style={{padding:"10px 28px",background:isAwd?"#cc6600":"#e8e8e8",border:"none",borderRadius:6,color:"#0a0a0a",cursor:saving?"wait":"pointer",fontSize:14,fontWeight:700,opacity:saving?0.7:1}}>
             {saving?"Saving...":"Save Project"}
           </button>
         </div>
@@ -275,10 +275,10 @@ function ImportModal({ onClose, onImport, importing }) {
           <label style={{color:"#888",fontSize:11,letterSpacing:1,display:"block",marginBottom:6,fontFamily:"monospace"}}>OR PASTE CSV TEXT</label>
           <textarea value={text} onChange={e=>handlePaste(e.target.value)} rows={5} style={{width:"100%",background:"#1a1a1a",border:"1px solid #2a2a44",borderRadius:6,color:"#F5F5F5",padding:"10px 12px",fontSize:12,outline:"none",resize:"vertical",boxSizing:"border-box",fontFamily:"monospace"}}/>
         </div>
-        {preview.length>0&&<div style={{marginTop:20}}><div style={{color:"#5a8a6a",fontSize:12,marginBottom:10,fontFamily:"monospace"}}>✓ {preview.length} PROJECTS DETECTED</div><div style={{maxHeight:180,overflowY:"auto",border:"1px solid #1e1e38",borderRadius:6}}>{preview.slice(0,6).map((b,i)=>(<div key={i} style={{display:"grid",gridTemplateColumns:"3fr 1fr 1fr",gap:12,padding:"9px 14px",borderBottom:"1px solid #141420",fontSize:12}}><div style={{color:"#F5F5F5"}}>{b.project}</div><div style={{color:"#888"}}>{b.town}</div><div style={{color:"#FFD100",fontFamily:"monospace"}}>{fmt$(b.value)}</div></div>))}{preview.length>6&&<div style={{padding:"9px 14px",color:"#555",fontSize:12}}>+{preview.length-6} more...</div>}</div></div>}
+        {preview.length>0&&<div style={{marginTop:20}}><div style={{color:"#5a8a6a",fontSize:12,marginBottom:10,fontFamily:"monospace"}}>✓ {preview.length} PROJECTS DETECTED</div><div style={{maxHeight:180,overflowY:"auto",border:"1px solid #1e1e38",borderRadius:6}}>{preview.slice(0,6).map((b,i)=>(<div key={i} style={{display:"grid",gridTemplateColumns:"3fr 1fr 1fr",gap:12,padding:"9px 14px",borderBottom:"1px solid #141420",fontSize:12}}><div style={{color:"#F5F5F5"}}>{b.project}</div><div style={{color:"#888"}}>{b.town}</div><div style={{color:"#e8e8e8",fontFamily:"monospace"}}>{fmt$(b.value)}</div></div>))}{preview.length>6&&<div style={{padding:"9px 14px",color:"#555",fontSize:12}}>+{preview.length-6} more...</div>}</div></div>}
         <div style={{display:"flex",gap:12,marginTop:24,justifyContent:"flex-end"}}>
           <button onClick={onClose} style={{padding:"10px 24px",background:"none",border:"1px solid #333",borderRadius:6,color:"#888",cursor:"pointer",fontSize:14}}>Cancel</button>
-          <button disabled={preview.length===0||importing} onClick={()=>onImport(preview)} style={{padding:"10px 28px",background:preview.length>0?"#FFD100":"#1a1a1a",border:"none",borderRadius:6,color:preview.length>0?"#0a0a0a":"#444",cursor:preview.length>0&&!importing?"pointer":"default",fontSize:14,fontWeight:700}}>
+          <button disabled={preview.length===0||importing} onClick={()=>onImport(preview)} style={{padding:"10px 28px",background:preview.length>0?"#e8e8e8":"#1a1a1a",border:"none",borderRadius:6,color:preview.length>0?"#0a0a0a":"#444",cursor:preview.length>0&&!importing?"pointer":"default",fontSize:14,fontWeight:700}}>
             {importing?`Saving to database...`:`Import ${preview.length>0?preview.length:""} Projects`}
           </button>
         </div>
@@ -430,10 +430,10 @@ function BidTracker() {
   if(loading) return (
     <div style={{minHeight:"100vh",background:"#0a0a0a",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
       <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:32,letterSpacing:4,color:"#FFD100"}}>EQUIPMENTSHARE</div>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:32,letterSpacing:4,color:"#e8e8e8"}}>REPROUTE</div>
       <div style={{color:"#444",fontSize:13,letterSpacing:2,fontFamily:"monospace"}}>LOADING LIVE DATABASE...</div>
       <div style={{width:200,height:2,background:"#222222",borderRadius:2,overflow:"hidden"}}>
-        <div style={{height:"100%",background:"#FFD100",animation:"load 1.5s ease-in-out infinite",width:"40%"}}/>
+        <div style={{height:"100%",background:"#e8e8e8",animation:"load 1.5s ease-in-out infinite",width:"40%"}}/>
       </div>
       {dbError&&<div style={{color:"#cc4444",fontSize:12,maxWidth:400,textAlign:"center",padding:"0 20px"}}>{dbError}</div>}
       <style>{`@keyframes load{0%{transform:translateX(-100%)}100%{transform:translateX(600%)}}`}</style>
@@ -448,20 +448,20 @@ function BidTracker() {
       {/* Header */}
       <div style={{borderBottom:"1px solid #1a1a2e",padding:"16px 32px",display:"flex",alignItems:"center",justifyContent:"space-between",background:"#0f0f0f"}}>
         <div style={{display:"flex",alignItems:"baseline",gap:12}}>
-          <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,letterSpacing:4,color:"#FFD100"}}>EQUIPMENTSHARE</span>
+          <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,letterSpacing:4,color:"#e8e8e8"}}>REPROUTE</span>
           <span style={{color:"#444",fontSize:16}}>|</span>
           <span style={{color:"#666",fontSize:12,letterSpacing:2}}>BID INTELLIGENCE · LIVE</span>
           {lastSync&&<span style={{color:"#2a4a2a",fontSize:10,fontFamily:"monospace",marginLeft:8}}>● synced {lastSync.toLocaleTimeString()}</span>}
         </div>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <button onClick={()=>loadBids(false)} style={{background:"#1a1a1a",border:"1px solid #2a2a44",borderRadius:6,color:"#666",padding:"7px 14px",cursor:"pointer",fontSize:12}}>↻ Refresh</button>
-          <button onClick={()=>setShowImport(true)} style={{background:"#1a1a1a",border:"1px solid #2a2a44",borderRadius:6,color:"#FFD100",padding:"8px 16px",cursor:"pointer",fontSize:13,fontWeight:600}}>⬆ Import Dodge CSV</button>
-          <button onClick={()=>setModal("add")} style={{background:"#FFD100",border:"none",borderRadius:6,color:"#0a0a0a",padding:"9px 18px",cursor:"pointer",fontSize:13,fontWeight:700}}>+ Add Project</button>
+          <button onClick={()=>setShowImport(true)} style={{background:"#1a1a1a",border:"1px solid #2a2a44",borderRadius:6,color:"#e8e8e8",padding:"8px 16px",cursor:"pointer",fontSize:13,fontWeight:600}}>⬆ Import Dodge CSV</button>
+          <button onClick={()=>setModal("add")} style={{background:"#e8e8e8",border:"none",borderRadius:6,color:"#0a0a0a",padding:"9px 18px",cursor:"pointer",fontSize:13,fontWeight:700}}>+ Add Project</button>
         </div>
       </div>
 
       {/* DB Error Banner */}
-      {dbError&&<div style={{background:"#2a0a0a",borderBottom:"1px solid #cc4444",padding:"10px 32px",color:"#cc8888",fontSize:12,fontFamily:"monospace"}}>⚠ Database error: {dbError} — <button onClick={()=>loadBids(true)} style={{background:"none",border:"none",color:"#FFD100",cursor:"pointer",fontSize:12,textDecoration:"underline"}}>retry</button></div>}
+      {dbError&&<div style={{background:"#2a0a0a",borderBottom:"1px solid #cc4444",padding:"10px 32px",color:"#cc8888",fontSize:12,fontFamily:"monospace"}}>⚠ Database error: {dbError} — <button onClick={()=>loadBids(true)} style={{background:"none",border:"none",color:"#e8e8e8",cursor:"pointer",fontSize:12,textDecoration:"underline"}}>retry</button></div>}
 
       {/* Award Alert Banner */}
       {awarded.length>0&&(
@@ -480,7 +480,7 @@ function BidTracker() {
 
       {/* Stats */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:1,borderBottom:"1px solid #1a1a2e",background:"#222222"}}>
-        {[["ACTIVE BIDS",stats.total,null],["PIPELINE VALUE",fmt$(stats.pipeline),"#FFD100"],["🏆 NEED CONTACT",stats.awarded,stats.awarded>0?"#ffaa00":null],["BID IN ≤7 DAYS",stats.urgent,stats.urgent>0?"#FFD100":null]].map(([label,val,color])=>(
+        {[["ACTIVE BIDS",stats.total,null],["PIPELINE VALUE",fmt$(stats.pipeline),"#e8e8e8"],["🏆 NEED CONTACT",stats.awarded,stats.awarded>0?"#ffaa00":null],["BID IN ≤7 DAYS",stats.urgent,stats.urgent>0?"#e8e8e8":null]].map(([label,val,color])=>(
           <div key={label} style={{background:"#0f0f0f",padding:"18px 24px",borderRight:"1px solid #1a1a2e"}}>
             <div style={{color:"#444",fontSize:10,letterSpacing:2,marginBottom:5,fontFamily:"monospace"}}>{label}</div>
             <div style={{fontSize:26,fontFamily:"'Bebas Neue',sans-serif",letterSpacing:1,color:color||"#F5F5F5"}}>{val}</div>
@@ -491,7 +491,7 @@ function BidTracker() {
       {/* Day Route Buttons */}
       <div style={{padding:"12px 32px",display:"flex",gap:8,alignItems:"center",borderBottom:"1px solid #141420",background:"#0a0a12",flexWrap:"wrap"}}>
         <span style={{color:"#444",fontSize:10,fontFamily:"monospace",letterSpacing:2,marginRight:4,whiteSpace:"nowrap"}}>FIELD DAY:</span>
-        <button onClick={()=>setFilterDay("All")} style={{padding:"8px 16px",borderRadius:6,border:`1px solid ${filterDay==="All"?"#666":"#222"}`,background:filterDay==="All"?"#FFD100":"transparent",color:filterDay==="All"?"#0a0a0a":"#555",cursor:"pointer",fontSize:12,fontWeight:700,letterSpacing:1}}>ALL</button>
+        <button onClick={()=>setFilterDay("All")} style={{padding:"8px 16px",borderRadius:6,border:`1px solid ${filterDay==="All"?"#666":"#222"}`,background:filterDay==="All"?"#e8e8e8":"transparent",color:filterDay==="All"?"#0a0a0a":"#555",cursor:"pointer",fontSize:12,fontWeight:700,letterSpacing:1}}>ALL</button>
         {Object.entries(DAY_ROUTES).map(([day,r])=>{
           const active=filterDay===day;
           const dayCount=bids.filter(b=>getDay(b)===day&&!["Won","Lost"].includes(b.status)).length;
@@ -541,13 +541,13 @@ function BidTracker() {
                 >
                   <div>
                     <div style={{fontWeight:600,fontSize:13,color:isAwd?"#ffcc44":"#F5F5F5",marginBottom:2}}>{bid.project}</div>
-                    <div style={{fontSize:11,color:"#555"}}>{bid.awardedTo?<span>🏆 <span style={{color:"#ffaa00"}}>{bid.awardedTo}</span></span>:bid.gc!=="TBD"?bid.gc:<span style={{color:"#FFD100",fontSize:10}}>GC TBD</span>}{" · "}{bid.town}</div>
+                    <div style={{fontSize:11,color:"#555"}}>{bid.awardedTo?<span>🏆 <span style={{color:"#ffaa00"}}>{bid.awardedTo}</span></span>:bid.gc!=="TBD"?bid.gc:<span style={{color:"#e8e8e8",fontSize:10}}>GC TBD</span>}{" · "}{bid.town}</div>
                     {bid.notes&&<div style={{fontSize:10,color:"#3a3a4a",marginTop:2}}>{bid.notes.slice(0,70)}{bid.notes.length>70?"…":""}</div>}
                   </div>
-                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:17,color:"#FFD100",letterSpacing:1}}>{fmt$(bid.value)}<div style={{fontSize:9,color:"#3a3a4a",fontFamily:"monospace"}}>{bid.type.toUpperCase()}</div></div>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:17,color:"#e8e8e8",letterSpacing:1}}>{fmt$(bid.value)}<div style={{fontSize:9,color:"#3a3a4a",fontFamily:"monospace"}}>{bid.type.toUpperCase()}</div></div>
                   <div>
-                    <div style={{fontSize:12,color:isUrgent?"#FFD100":isAwd?"#ffaa00":"#666"}}>{isAwd&&bid.awardDate?`Awd ${fmtDate(bid.awardDate)}`:fmtDate(bid.bidDate)}</div>
-                    {!isAwd&&days!==null&&<div style={{fontSize:10,color:isUrgent?"#FFD100":"#3a3a4a"}}>{days<0?`${Math.abs(days)}d ago`:days===0?"TODAY":`in ${days}d`}</div>}
+                    <div style={{fontSize:12,color:isUrgent?"#e8e8e8":isAwd?"#ffaa00":"#666"}}>{isAwd&&bid.awardDate?`Awd ${fmtDate(bid.awardDate)}`:fmtDate(bid.bidDate)}</div>
+                    {!isAwd&&days!==null&&<div style={{fontSize:10,color:isUrgent?"#e8e8e8":"#3a3a4a"}}>{days<0?`${Math.abs(days)}d ago`:days===0?"TODAY":`in ${days}d`}</div>}
                   </div>
                   <div style={{width:7,height:7,borderRadius:"50%",background:PRIORITY_COLORS[bid.priority],boxShadow:`0 0 6px ${PRIORITY_COLORS[bid.priority]}`,margin:"0 auto"}} title={bid.priority}/>
                   <div style={{display:"flex",flexDirection:"column",gap:3}}>
@@ -584,13 +584,13 @@ const DAY_CONFIG = {
   Monday:    { color:"#4a9eff", bg:"#091929", border:"#1a4a7a", label:"MON", desc:"S. Litchfield + Waterbury" },
   Tuesday:   { color:"#b04ae8", bg:"#120d1e", border:"#4a1a6b", label:"TUE", desc:"Berkshires AM · Springfield PM" },
   Wednesday: { color:"#4ae8a0", bg:"#091a12", border:"#1a6b40", label:"WED", desc:"W. + N. Litchfield Loop" },
-  Thursday:  { color:"#e8c84a", bg:"#1a1600", border:"#6b5200", label:"THU", desc:"Hartford + 84 Corridor" },
+  Thursday:  { color:"#e8c84a", bg:"#1a1a1a", border:"#6b5200", label:"THU", desc:"Hartford + 84 Corridor" },
 };
 const TYPE_OPTIONS_MAP = ["GC","Excavation","Paving","Roofing","Industrial","Other"];
 const PRIORITY_OPTIONS_MAP = ["High","Medium","Low"];
 const STATE_OPTIONS = ["CT","MA"];
 const TYPE_ICONS = { GC:"🏗", Excavation:"⛏", Paving:"🚧", Roofing:"🏠", Industrial:"🏭", Other:"📍" };
-const PRIORITY_COLORS_MAP = { High:"#FFD100", Medium:"#4a9eff", Low:"#555" };
+const PRIORITY_COLORS_MAP = { High:"#e8e8e8", Medium:"#4a9eff", Low:"#555" };
 
 const BLANK_COMPANY = { name:"", day:"Monday", type:"GC", lat:"", lng:"", town:"", state:"CT", phone:"", notes:"", priority:"Medium", website:"", contact:"" };
 
@@ -604,7 +604,7 @@ function CompanyModal({ company, onClose, onSave, saving }) {
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
       <div style={{background:"#0f0f0f",border:`1px solid ${dc.color}`,borderRadius:12,width:"100%",maxWidth:600,maxHeight:"90vh",overflowY:"auto",padding:32,position:"relative",boxShadow:`0 0 30px ${dc.color}22`}}>
         <button onClick={onClose} style={{position:"absolute",top:16,right:20,background:"none",border:"none",color:"#555",fontSize:22,cursor:"pointer"}}>×</button>
-        <h2 style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:24,letterSpacing:2,color:"#FFD100",marginBottom:6}}>{isNew?"ADD COMPANY":"EDIT COMPANY"}</h2>
+        <h2 style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:24,letterSpacing:2,color:"#e8e8e8",marginBottom:6}}>{isNew?"ADD COMPANY":"EDIT COMPANY"}</h2>
         <p style={{color:"#444",fontSize:12,marginBottom:24,fontFamily:"monospace"}}>All fields save directly to the live database.</p>
 
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
@@ -637,7 +637,7 @@ function CompanyModal({ company, onClose, onSave, saving }) {
           <div>
             <label style={{color:"#888",fontSize:10,letterSpacing:1,display:"block",marginBottom:5,fontFamily:"monospace"}}>PHONE</label>
             <input value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder="(860) 555-0100"
-              style={{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:"#FFD100",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+              style={{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:"#e8e8e8",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
           </div>
 
           {/* Contact name */}
@@ -702,7 +702,7 @@ function CompanyModal({ company, onClose, onSave, saving }) {
         <div style={{display:"flex",gap:10,marginTop:24,justifyContent:"flex-end"}}>
           <button onClick={onClose} style={{padding:"10px 22px",background:"none",border:"1px solid #333",borderRadius:6,color:"#666",cursor:"pointer",fontSize:13}}>Cancel</button>
           <button onClick={()=>onSave(form)} disabled={!form.name||saving}
-            style={{padding:"10px 28px",background:form.name?"#FFD100":"#222",border:"none",borderRadius:6,color:form.name?"#0a0a0a":"#555",cursor:form.name&&!saving?"pointer":"default",fontSize:13,fontWeight:700,opacity:saving?0.7:1}}>
+            style={{padding:"10px 28px",background:form.name?"#e8e8e8":"#222",border:"none",borderRadius:6,color:form.name?"#0a0a0a":"#555",cursor:form.name&&!saving?"pointer":"default",fontSize:13,fontWeight:700,opacity:saving?0.7:1}}>
             {saving?"Saving...":(isNew?"Add to Map":"Save Changes")}
           </button>
         </div>
@@ -782,36 +782,14 @@ function TerritoryMap() {
       setMapReady(true);
     }
 
-    // Load CSS
-    if (!document.getElementById("lfcss")) {
-      const link = document.createElement("link");
-      link.id  = "lfcss";
-      link.rel = "stylesheet";
-      link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-      link.onload = () => {
-        cssReadyRef.current = true;
-        if (window.L) initMap();
-      };
-      document.head.appendChild(link);
-    } else {
-      cssReadyRef.current = true;
+    // Leaflet is loaded in index.html before React mounts
+    // Just init immediately, with a short poll as safety net
+    cssReadyRef.current = true;
+    if (window.L && mapDivRef.current) {
+      initMap();
     }
 
-    // Load JS
-    if (!document.getElementById("lfjs")) {
-      const script = document.createElement("script");
-      script.id  = "lfjs";
-      script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-      script.onload = () => {
-        if (cssReadyRef.current) initMap();
-        else setTimeout(initMap, 200);
-      };
-      document.head.appendChild(script);
-    } else if (window.L) {
-      setTimeout(initMap, 0);
-    }
-
-    // Fallback poll — if onload events missed, retry until map appears
+    // Poll as safety net for slow connections
     const poll = setInterval(() => {
       if (cancelled) { clearInterval(poll); return; }
       if (window.L && mapDivRef.current && !leafletRef.current) {
@@ -819,7 +797,7 @@ function TerritoryMap() {
         initMap();
       }
       if (leafletRef.current) clearInterval(poll);
-    }, 300);
+    }, 200);
 
     return () => { cancelled = true; clearInterval(poll); };
   }, []);
@@ -954,7 +932,7 @@ function TerritoryMap() {
 
   if (loading) return (
     <div style={{height:"calc(100vh - 54px)",background:"#0a0a0a",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{color:"#FFD100",fontFamily:"'Bebas Neue',sans-serif",fontSize:24,letterSpacing:3}}>LOADING...</div>
+      <div style={{color:"#e8e8e8",fontFamily:"'Bebas Neue',sans-serif",fontSize:24,letterSpacing:3}}>LOADING...</div>
     </div>
   );
 
@@ -967,7 +945,7 @@ function TerritoryMap() {
       {/* ── Filter bar ── */}
       <div style={{background:"#0a0a0a",borderBottom:"1px solid #1e1e1e",padding:"10px 24px",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
         <span style={{color:"#444",fontSize:10,fontFamily:"monospace",letterSpacing:2}}>ROUTE DAY:</span>
-        <button onClick={()=>setActiveDay("All")} style={{padding:"5px 12px",borderRadius:5,border:`1px solid ${activeDay==="All"?"#FFD100":"#222"}`,background:activeDay==="All"?"#1a1600":"transparent",color:activeDay==="All"?"#FFD100":"#444",cursor:"pointer",fontSize:11,fontWeight:700}}>ALL</button>
+        <button onClick={()=>setActiveDay("All")} style={{padding:"5px 12px",borderRadius:5,border:`1px solid ${activeDay==="All"?"#e8e8e8":"#222"}`,background:activeDay==="All"?"#1a1a1a":"transparent",color:activeDay==="All"?"#ffffff":"#444",cursor:"pointer",fontSize:11,fontWeight:700}}>ALL</button>
         {Object.entries(DAY_CONFIG).map(([day,dc])=>{
           const active = activeDay===day;
           return (
@@ -983,12 +961,12 @@ function TerritoryMap() {
         <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
           {["All",...types].map(t=>(
             <button key={t} onClick={()=>setActiveType(t)}
-              style={{padding:"4px 10px",borderRadius:4,border:`1px solid ${activeType===t?"#FFD100":"#222"}`,background:activeType===t?"#1a1600":"transparent",color:activeType===t?"#FFD100":"#444",cursor:"pointer",fontSize:10}}>
+              style={{padding:"4px 10px",borderRadius:4,border:`1px solid ${activeType===t?"#e8e8e8":"#222"}`,background:activeType===t?"#1a1a1a":"transparent",color:activeType===t?"#ffffff":"#444",cursor:"pointer",fontSize:10}}>
               {t==="All"?"All":(TYPE_ICONS[t]||"📍")+" "+t}
             </button>
           ))}
           <button onClick={()=>setModal("add")}
-            style={{marginLeft:8,padding:"6px 16px",background:"#FFD100",border:"none",borderRadius:6,color:"#0a0a0a",cursor:"pointer",fontSize:12,fontWeight:700}}>
+            style={{marginLeft:8,padding:"6px 16px",background:"#e8e8e8",border:"none",borderRadius:6,color:"#0a0a0a",cursor:"pointer",fontSize:12,fontWeight:700}}>
             + Add Company
           </button>
         </div>
@@ -1033,7 +1011,7 @@ function TerritoryMap() {
                         </div>
                         <div style={{fontSize:10,color:"#555",marginTop:2}}>
                           {c.town}, {c.state}
-                          {c.phone&&<span style={{color:"#FFD100",opacity:.6,marginLeft:8}}>{c.phone}</span>}
+                          {c.phone&&<span style={{color:"#aaaaaa",opacity:.8,marginLeft:8}}>{c.phone}</span>}
                         </div>
                         {isSel&&c.notes&&<div style={{fontSize:10,color:"#555",marginTop:3,fontStyle:"italic"}}>{c.notes.slice(0,80)}</div>}
                         {isSel&&c.lat&&c.lng&&(
@@ -1089,7 +1067,7 @@ function TerritoryMap() {
                 <div style={{fontWeight:700,fontSize:16}}>{selected.name}</div>
                 <div style={{fontSize:11,color:"#666"}}>{selected.town}, {selected.state}</div>
               </div>
-              {selected.phone&&<a href={`tel:${selected.phone}`} style={{padding:"8px 14px",background:"#1a1a00",border:"1px solid #FFD100",borderRadius:6,color:"#FFD100",fontWeight:700,fontSize:12,textDecoration:"none"}}>📞 {selected.phone}</a>}
+              {selected.phone&&<a href={`tel:${selected.phone}`} style={{padding:"8px 14px",background:"#1a1a1a",border:"1px solid #888",borderRadius:6,color:"#e8e8e8",fontWeight:700,fontSize:12,textDecoration:"none"}}>📞 {selected.phone}</a>}
               {selected.lat&&selected.lng&&<a href={`https://waze.com/ul?ll=${selected.lat},${selected.lng}&navigate=yes`} target="_blank" rel="noreferrer" style={{padding:"8px 14px",background:"#05c8f7",borderRadius:6,color:"#000",fontWeight:700,fontSize:12,textDecoration:"none"}}>🚗 Waze</a>}
               {selected.lat&&selected.lng&&<a href={`https://maps.google.com/?q=${selected.lat},${selected.lng}`} target="_blank" rel="noreferrer" style={{padding:"8px 14px",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:"#888",fontSize:12,textDecoration:"none"}}>🗺 Maps</a>}
               <button onClick={()=>setModal(selected)} style={{padding:"8px 12px",background:"#1a1a1a",border:"1px solid #444",borderRadius:6,color:"#aaa",cursor:"pointer",fontSize:11}}>✎ Edit</button>
@@ -1125,7 +1103,7 @@ function LoginScreen() {
       <div style={{width:380,padding:"48px 40px",background:"#0d0d0d",border:"1px solid #1e1e1e",borderRadius:16,textAlign:"center"}}>
         {/* Logo / Brand */}
         <div style={{marginBottom:32}}>
-          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:42,color:"#FFD100",letterSpacing:4,lineHeight:1}}>REPROUTE</div>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:42,color:"#e8e8e8",letterSpacing:4,lineHeight:1}}>REPROUTE</div>
           <div style={{fontSize:11,color:"#444",letterSpacing:3,fontFamily:"monospace",marginTop:4}}>FIELD SALES INTELLIGENCE</div>
         </div>
 
@@ -1193,10 +1171,10 @@ export default function App() {
       }}>
         {/* Logo */}
         <div style={{ display:"flex", alignItems:"center", gap:12, marginRight:32, paddingRight:32, borderRight:"1px solid #1e1e1e" }}>
-          <span style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:24, letterSpacing:4, color:"#FFD100" }}>
-            EQUIPMENTSHARE
+          <span style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:24, letterSpacing:4, color:"#ffffff" }}>
+            REPROUTE
           </span>
-          <span style={{ color:"#2a2a00", fontSize:10, letterSpacing:2, fontFamily:"monospace" }}>
+          <span style={{ color:"#555", fontSize:10, letterSpacing:2, fontFamily:"monospace" }}>
             WESTERN CT · MA
           </span>
         </div>
@@ -1212,8 +1190,8 @@ export default function App() {
                 style={{
                   background:"none",
                   border:"none",
-                  borderBottom: active ? "2px solid #FFD100" : "2px solid transparent",
-                  color: active ? "#FFD100" : "#555",
+                  borderBottom: active ? "2px solid #e8e8e8" : "2px solid transparent",
+                  color: active ? "#ffffff" : "#555",
                   cursor:"pointer",
                   padding:"0 20px",
                   fontSize:11,
