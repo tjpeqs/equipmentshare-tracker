@@ -757,7 +757,7 @@ function TerritoryMap() {
   const leafletRef = useRef(null); // holds { map, markers }
   const cssReadyRef = useRef(false);
 
-  // ── 1. Load Leaflet CSS + JS from CDN, init map once both ready ──────────
+  // ── 1. Lazy init map only when tab is visible ────────────────────────────
   useEffect(() => {
     let cancelled = false;
 
@@ -765,6 +765,11 @@ function TerritoryMap() {
       if (cancelled) return;
       if (!mapDivRef.current) return;
       if (leafletRef.current) return; // already inited
+      // Don't init if div has no size yet (tab not visible)
+      if (mapDivRef.current.offsetWidth === 0) {
+        setTimeout(() => { if (!cancelled) initMap(); }, 300);
+        return;
+      }
 
       const L = window.L;
       if (!L) return;
@@ -772,9 +777,9 @@ function TerritoryMap() {
       // Fix broken default marker icons (Vite strips them)
       delete L.Icon.Default.prototype._getIconUrl;
       L.Icon.Default.mergeOptions({
-        iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-        iconUrl:       "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-        shadowUrl:     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+        iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
+        iconUrl:       "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
+        shadowUrl:     "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
       });
 
       const map = L.map(mapDivRef.current, {
@@ -877,11 +882,28 @@ function TerritoryMap() {
 
   // ── 3. Load companies ────────────────────────────────────────────────────
   useEffect(() => {
+    // Load from cache instantly, then refresh from Supabase in background
+    const cacheKey = `companies_${getUserId()}`;
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        setCompanies(JSON.parse(cached));
+        setLoading(false);
+      } catch {}
+    }
+    const session = JSON.parse(localStorage.getItem("sb_session") || "{}");
+    const token = session.access_token || SUPABASE_KEY;
     fetch(`${SUPABASE_URL}/rest/v1/companies?select=*&user_id=eq.${getUserId()}&order=id.asc&limit=1000`, {
-      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}` }
     })
     .then(r => r.json())
-    .then(data => { setCompanies(data || []); setLoading(false); })
+    .then(data => {
+      if (Array.isArray(data)) {
+        setCompanies(data);
+        localStorage.setItem(cacheKey, JSON.stringify(data));
+      }
+      setLoading(false);
+    })
     .catch(() => setLoading(false));
   }, []);
 
