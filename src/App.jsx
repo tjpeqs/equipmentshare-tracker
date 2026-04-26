@@ -17,7 +17,8 @@ async function supabaseRequest(path, options = {}) {
 
 async function signInWithGoogle() {
   const redirectTo = encodeURIComponent(window.location.origin);
-  window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${redirectTo}`;
+  const scopes = encodeURIComponent("https://www.googleapis.com/auth/calendar.readonly");
+  window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${redirectTo}&scopes=${scopes}&access_type=offline&prompt=consent`;
 }
 
 async function signOut() {
@@ -47,9 +48,10 @@ function getSession() {
   if (hash && hash.includes("access_token")) {
     const params = new URLSearchParams(hash.replace("#", ""));
     const session = {
-      access_token: params.get("access_token"),
-      refresh_token: params.get("refresh_token"),
-      expires_in: params.get("expires_in"),
+      access_token:   params.get("access_token"),
+      refresh_token:  params.get("refresh_token"),
+      expires_in:     params.get("expires_in"),
+      provider_token: params.get("provider_token"), // Google OAuth token for Calendar API
     };
     localStorage.setItem("sb_session", JSON.stringify(session));
     window.location.hash = "";
