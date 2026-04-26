@@ -17,8 +17,7 @@ async function supabaseRequest(path, options = {}) {
 
 async function signInWithGoogle() {
   const redirectTo = encodeURIComponent(window.location.origin);
-  const scopes = encodeURIComponent("https://www.googleapis.com/auth/calendar.readonly");
-  window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${redirectTo}&scopes=${scopes}&access_type=offline&prompt=consent`;
+  window.location.href = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${redirectTo}`;
 }
 
 async function signOut() {
