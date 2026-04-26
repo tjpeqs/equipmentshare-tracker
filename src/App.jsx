@@ -1489,6 +1489,7 @@ export default function App() {
         {/* Logo */}
         <div style={{ display:"flex", alignItems:"center", gap:12, marginRight:32, paddingRight:32, borderRight:"1px solid #1e1e1e" }}>
           {/* SVG Logo */}
+          <a href="/" style={{textDecoration:"none",display:"flex",alignItems:"center"}}>
           <svg width="160" height="44" viewBox="0 0 160 44" style={{display:"block",flexShrink:0}}>
             {/* Route path */}
             <circle cx="10" cy="14" r="7" fill="#cc2222"/>
@@ -1507,6 +1508,7 @@ export default function App() {
             <text x="78" y="20" style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,letterSpacing:2,fill:"#f0f0f0"}}>REP<tspan style={{fill:"#cc2222"}}>ROUTE</tspan></text>
             <text x="78" y="32" style={{fontFamily:"monospace",fontSize:7,letterSpacing:2,fill:"#555"}}>FIELD SALES · ROUTE INTELLIGENCE</text>
           </svg>
+          </a>
         </div>
 
         {/* Nav tabs */}
