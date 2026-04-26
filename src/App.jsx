@@ -597,12 +597,28 @@ function BidTracker() {
 //  TERRITORY MAP  (Supabase-wired, add/edit/delete companies)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-const DAY_CONFIG = {
-  Monday:    { color:"#4a9eff", bg:"#091929", border:"#1a4a7a", label:"MON", desc:"S. Litchfield + Waterbury" },
-  Tuesday:   { color:"#b04ae8", bg:"#120d1e", border:"#4a1a6b", label:"TUE", desc:"Berkshires AM · Springfield PM" },
-  Wednesday: { color:"#4ae8a0", bg:"#091a12", border:"#1a6b40", label:"WED", desc:"W. + N. Litchfield Loop" },
-  Thursday:  { color:"#e8c84a", bg:"#1a1a1a", border:"#6b5200", label:"THU", desc:"Hartford + 84 Corridor" },
+const DEFAULT_DAY_CONFIG = {
+  Monday:    { color:"#4a9eff", bg:"#091929", border:"#1a4a7a", label:"MON", desc:"Route 1" },
+  Tuesday:   { color:"#b04ae8", bg:"#120d1e", border:"#4a1a6b", label:"TUE", desc:"Route 2" },
+  Wednesday: { color:"#4ae8a0", bg:"#091a12", border:"#1a6b40", label:"WED", desc:"Route 3" },
+  Thursday:  { color:"#e8c84a", bg:"#1a1a1a", border:"#6b5200", label:"THU", desc:"Route 4" },
+  Friday:    { color:"#e8503a", bg:"#1a0a08", border:"#6b2010", label:"FRI", desc:"Route 5" },
 };
+
+function getDAYCONFIG(userRoutes) {
+  const base = JSON.parse(JSON.stringify(DEFAULT_DAY_CONFIG));
+  if (!userRoutes) return base;
+  Object.keys(base).forEach(day => {
+    if (userRoutes[day]) {
+      base[day].desc = userRoutes[day];
+    }
+  });
+  return base;
+}
+
+// Will be overridden per-user after settings load
+let DAY_CONFIG = JSON.parse(JSON.stringify(DEFAULT_DAY_CONFIG));
+
 const TYPE_OPTIONS_MAP = ["GC","Excavation","Paving","Roofing","Industrial","Other"];
 const PRIORITY_OPTIONS_MAP = ["High","Medium","Low"];
 const STATE_OPTIONS = ["CT","MA"];
@@ -1468,6 +1484,32 @@ function ActivityLog() {
           </div>
         </div>
       </div>
+      {/* ── Route Names Modal ── */}
+      {editingRoutes && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div style={{background:"#0d0d0d",border:"1px solid #222",borderRadius:12,padding:32,width:420,fontFamily:"'DM Sans',sans-serif"}}>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,letterSpacing:3,color:"#e8e8e8",marginBottom:6}}>CUSTOMIZE ROUTES</div>
+            <div style={{fontSize:11,color:"#444",fontFamily:"monospace",letterSpacing:1,marginBottom:20}}>Name each day route for your territory</div>
+            {Object.entries(DEFAULT_DAY_CONFIG).map(([day, dc]) => (
+              <div key={day} style={{marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:36,height:36,borderRadius:6,background:dc.bg,border:`1px solid ${dc.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <span style={{fontFamily:"monospace",fontSize:9,fontWeight:700,color:dc.color,letterSpacing:1}}>{dc.label}</span>
+                </div>
+                <input
+                  value={routeDraft[day] ?? dc.desc}
+                  onChange={e => setRouteDraft(d => ({...d, [day]: e.target.value}))}
+                  placeholder={dc.desc}
+                  style={{flex:1,background:"#111",border:`1px solid ${dc.border}`,borderRadius:5,color:"#e8e8e8",padding:"8px 10px",fontSize:12,outline:"none",fontFamily:"'DM Sans',sans-serif"}}
+                />
+              </div>
+            ))}
+            <div style={{display:"flex",gap:10,marginTop:24,justifyContent:"flex-end"}}>
+              <button onClick={()=>setEditingRoutes(false)} style={{padding:"8px 16px",background:"none",border:"1px solid #333",borderRadius:6,color:"#555",cursor:"pointer",fontSize:12}}>Cancel</button>
+              <button onClick={()=>saveRoutes(routeDraft)} style={{padding:"8px 20px",background:"#cc2222",border:"none",borderRadius:6,color:"#fff",cursor:"pointer",fontSize:12,fontWeight:600}}>Save Routes</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1475,12 +1517,49 @@ function ActivityLog() {
 export default function App() {
   const [view, setView] = useState("bids");
   const [session, setSession] = useState(() => getSession());
+  const [userRoutes, setUserRoutes] = useState({});
+  const [editingRoutes, setEditingRoutes] = useState(false);
+  const [routeDraft, setRouteDraft] = useState({});
 
   // Listen for auth state
   useEffect(() => {
     const s = getSession();
     setSession(s);
   }, []);
+
+  // Load user route names from Supabase
+  useEffect(() => {
+    const uid = getUserId();
+    if (!uid) return;
+    const token = JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY;
+    fetch(`${SUPABASE_URL}/rest/v1/user_settings?user_id=eq.${uid}&key=eq.routes&select=value`, {
+      headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`}
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (d?.[0]?.value) {
+        try {
+          const routes = JSON.parse(d[0].value);
+          setUserRoutes(routes);
+          DAY_CONFIG = getDAYCONFIG(routes);
+        } catch {}
+      }
+    })
+    .catch(() => {});
+  }, []);
+
+  const saveRoutes = async (draft) => {
+    const uid = getUserId();
+    const token = JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY;
+    await fetch(`${SUPABASE_URL}/rest/v1/user_settings`, {
+      method: "POST",
+      headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal"},
+      body: JSON.stringify({user_id: uid, key: "routes", value: JSON.stringify(draft)})
+    });
+    setUserRoutes(draft);
+    DAY_CONFIG = getDAYCONFIG(draft);
+    setEditingRoutes(false);
+  };
 
   // Not logged in — show login screen
   if (!session?.access_token) {
@@ -1573,6 +1652,9 @@ export default function App() {
           <span style={{ fontSize:9, color:"#333", fontFamily:"monospace", letterSpacing:1 }}>
             REPROUTE v2
           </span>
+          <button onClick={()=>{setRouteDraft({...userRoutes});setEditingRoutes(true);}} style={{padding:"5px 12px",background:"none",border:"1px solid #2a2a2a",borderRadius:5,color:"#555",cursor:"pointer",fontSize:11}}>
+            ⚙ ROUTES
+          </button>
           <button onClick={signOut} style={{padding:"5px 12px",background:"none",border:"1px solid #2a2a2a",borderRadius:5,color:"#444",cursor:"pointer",fontSize:10,fontFamily:"monospace",letterSpacing:1}}>
             SIGN OUT
           </button>
