@@ -1522,6 +1522,7 @@ function RoutePlanner() {
   const [activeDay, setActiveDay]   = useState("All");
   const [mapReady, setMapReady]     = useState(false);
   const [viewRoute, setViewRoute]   = useState(null);     // saved route being previewed
+  const [showLasso, setShowLasso]   = useState(false);
   const mapDivRef  = useRef(null);
   const leafletRef = useRef(null);
 
@@ -1791,6 +1792,9 @@ function RoutePlanner() {
           <span style={{fontSize:10,color:"#444",fontFamily:"monospace"}}>
             {stops.length} STOP{stops.length!==1?"S":""} PLANNED
           </span>
+          <button onClick={()=>setShowLasso(true)} style={{padding:"5px 14px",background:"#1a0a0a",border:"1px solid #cc2222",borderRadius:5,color:"#cc2222",cursor:"pointer",fontSize:10,fontFamily:"monospace",fontWeight:700,letterSpacing:1}}>
+            ⭕ LASSO
+          </button>
           {stops.length > 0 && (
             <button onClick={()=>setStops([])} style={{padding:"5px 10px",background:"none",border:"1px solid #2a2a2a",borderRadius:5,color:"#555",cursor:"pointer",fontSize:10,fontFamily:"monospace"}}>
               CLEAR
@@ -1948,6 +1952,13 @@ function RoutePlanner() {
           </div>
         </div>
       </div>
+      {showLasso && (
+        <LassoModal
+          companies={companies}
+          onClose={() => setShowLasso(false)}
+          onAccept={(route) => { setStops(route); setShowLasso(false); }}
+        />
+      )}
     </div>
   );
 }
@@ -3816,6 +3827,257 @@ function AutoPlayPanel({ companies, checkIns, followUps }) {
   );
 }
 
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  LASSO ROUTE OPTIMIZER
+//  Draw a circle → auto-generates optimal route through all
+//  companies inside it using nearest-neighbor algorithm
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Nearest-neighbor TSP heuristic — fast and good enough for <50 stops
+function optimizeRoute(stops) {
+  if (stops.length <= 2) return stops;
+  const unvisited = [...stops];
+  const route = [unvisited.shift()]; // start with first stop
+
+  while (unvisited.length > 0) {
+    const last = route[route.length - 1];
+    let nearest = 0;
+    let nearestDist = Infinity;
+
+    unvisited.forEach((stop, i) => {
+      if (!stop.lat || !stop.lng || !last.lat || !last.lng) return;
+      const d = Math.sqrt(
+        Math.pow(stop.lat - last.lat, 2) +
+        Math.pow(stop.lng - last.lng, 2)
+      );
+      if (d < nearestDist) { nearestDist = d; nearest = i; }
+    });
+
+    route.push(unvisited.splice(nearest, 1)[0]);
+  }
+  return route;
+}
+
+// Point in circle check
+function pointInCircle(lat, lng, centerLat, centerLng, radiusDeg) {
+  const d = Math.sqrt(
+    Math.pow(lat - centerLat, 2) +
+    Math.pow(lng - centerLng, 2)
+  );
+  return d <= radiusDeg;
+}
+
+function LassoModal({ companies, onAccept, onClose }) {
+  const [mode, setMode]           = useState("draw");   // draw | result
+  const [selected, setSelected]   = useState([]);
+  const [optimized, setOptimized] = useState([]);
+  const [radiusMiles, setRadiusMiles] = useState(15);
+  const [centerTown, setCenterTown]   = useState("");
+  const mapRef  = useRef(null);
+  const leafRef = useRef(null);
+
+  // Town center coords for lasso center
+  const TOWN_COORDS = {
+    "Torrington":{lat:41.8005,lng:-73.1212},
+    "Winsted":{lat:41.9282,lng:-73.0626},
+    "New Milford":{lat:41.5776,lng:-73.4082},
+    "Litchfield":{lat:41.7490,lng:-73.1876},
+    "Waterbury":{lat:41.5582,lng:-73.0515},
+    "Pittsfield":{lat:42.4501,lng:-73.2553},
+    "Springfield":{lat:42.1015,lng:-72.5898},
+    "Salisbury":{lat:41.9790,lng:-73.4204},
+    "Great Barrington":{lat:42.1959,lng:-73.3626},
+    "Hartford":{lat:41.7620,lng:-72.6850},
+  };
+
+  useEffect(() => {
+    if (!mapRef.current || leafRef.current) return;
+    const L = window.L;
+    if (!L) return;
+
+    const map = L.map(mapRef.current, { center:[42.05,-73.15], zoom:8 });
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+      { attribution:"© CARTO", maxZoom:19 }).addTo(map);
+
+    const companyLayer = L.layerGroup().addTo(map);
+    const lassoLayer   = L.layerGroup().addTo(map);
+
+    leafRef.current = { map, companyLayer, lassoLayer };
+    setTimeout(() => map.invalidateSize(), 100);
+
+    // Plot all companies
+    const withCoords = companies.filter(c => c.lat && c.lng);
+    withCoords.forEach(c => {
+      const dc = DAY_CONFIG[c.day] || DAY_CONFIG.Monday;
+      const icon = L.divIcon({
+        className:"",
+        iconSize:[16,22], iconAnchor:[8,22],
+        html:`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="22" viewBox="0 0 16 22">
+          <path d="M8 0C3.6 0 0 3.6 0 8c0 6 8 14 8 14s8-8 8-14C16 3.6 12.4 0 8 0z" fill="${dc.color}" opacity="0.8"/>
+          <circle cx="8" cy="8" r="4" fill="#0a0a0a"/>
+        </svg>`,
+      });
+      L.marker([c.lat, c.lng], { icon })
+        .bindTooltip(`<div style="font-family:monospace;font-size:11px;background:#111;color:#f5f5f5;padding:4px 8px;border-radius:4px">${c.name}</div>`, { direction:"top" })
+        .addTo(companyLayer);
+    });
+  }, []);
+
+  const runLasso = () => {
+    const tc = TOWN_COORDS[centerTown];
+    if (!tc) { alert("Select a town center first"); return; }
+    const { map, lassoLayer } = leafRef.current;
+    const L = window.L;
+
+    lassoLayer.clearLayers();
+
+    // Convert miles to approximate degrees (1 deg lat ≈ 69 miles)
+    const radiusDeg = radiusMiles / 69;
+
+    // Draw circle on map
+    L.circle([tc.lat, tc.lng], {
+      radius: radiusMiles * 1609.34,
+      color: "#cc2222", weight: 2,
+      fillColor: "#cc2222", fillOpacity: 0.08,
+      dashArray: "6 4",
+    }).addTo(lassoLayer);
+
+    // Find companies inside circle
+    const inside = companies.filter(c =>
+      c.lat && c.lng && pointInCircle(c.lat, c.lng, tc.lat, tc.lng, radiusDeg)
+    );
+
+    if (inside.length === 0) {
+      alert("No companies found in that radius. Try a larger radius or different town.");
+      return;
+    }
+
+    // Optimize route
+    const optimizedRoute = optimizeRoute(inside);
+    setSelected(inside);
+    setOptimized(optimizedRoute);
+
+    // Draw optimized route on map
+    const coords = optimizedRoute.filter(s => s.lat && s.lng).map(s => [s.lat, s.lng]);
+    L.polyline(coords, { color:"#cc2222", weight:2.5, opacity:0.8, dashArray:"5 4" }).addTo(lassoLayer);
+
+    // Numbered markers
+    optimizedRoute.forEach((c, i) => {
+      if (!c.lat || !c.lng) return;
+      L.divIcon({
+        className:"",
+        iconSize:[22,22], iconAnchor:[11,11],
+        html:`<div style="width:22px;height:22px;border-radius:50%;background:#cc2222;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:9px;font-weight:bold;color:#fff">${i+1}</div>`,
+      });
+      L.marker([c.lat, c.lng], {
+        icon: L.divIcon({
+          className:"",
+          iconSize:[22,22], iconAnchor:[11,11],
+          html:`<div style="width:22px;height:22px;border-radius:50%;background:#cc2222;border:2px solid #0a0a0a;display:flex;align-items:center;justify-content:center;font-family:monospace;font-size:9px;font-weight:bold;color:#fff">${i+1}</div>`,
+        })
+      }).addTo(lassoLayer);
+    });
+
+    // Fit map to circle
+    map.fitBounds(L.circle([tc.lat, tc.lng], { radius: radiusMiles * 1609.34 }).getBounds(), { padding:[20,20] });
+    setMode("result");
+  };
+
+  const totalMiles = () => {
+    if (optimized.length < 2) return 0;
+    let total = 0;
+    for (let i = 0; i < optimized.length-1; i++) {
+      const a = optimized[i], b = optimized[i+1];
+      if (!a.lat||!a.lng||!b.lat||!b.lng) continue;
+      const R = 3958.8;
+      const dLat = (b.lat-a.lat)*Math.PI/180;
+      const dLng = (b.lng-a.lng)*Math.PI/180;
+      const x = Math.sin(dLat/2)**2 + Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+      total += R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+    }
+    return total;
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:800,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{background:"#0a0a0a",border:"1px solid #cc2222",borderRadius:12,width:"100%",maxWidth:900,height:"85vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+
+        {/* Header */}
+        <div style={{padding:"14px 20px",borderBottom:"1px solid #1a1a1a",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+          <div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,letterSpacing:3,color:"#e8e8e8"}}>LASSO ROUTE OPTIMIZER</div>
+            <div style={{fontSize:10,color:"#444",fontFamily:"monospace",letterSpacing:1}}>SELECT A ZONE · AUTO-OPTIMIZE ROUTE</div>
+          </div>
+          <button onClick={onClose} style={{marginLeft:"auto",background:"none",border:"none",color:"#555",fontSize:22,cursor:"pointer"}}>×</button>
+        </div>
+
+        {/* Controls */}
+        <div style={{padding:"12px 20px",borderBottom:"1px solid #1a1a1a",display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
+          <div>
+            <div style={{fontSize:9,color:"#444",fontFamily:"monospace",letterSpacing:1,marginBottom:4}}>CENTER ON TOWN</div>
+            <select value={centerTown} onChange={e=>setCenterTown(e.target.value)}
+              style={{background:"#111",border:"1px solid #333",borderRadius:5,color:"#e8e8e8",padding:"7px 12px",fontSize:12,outline:"none"}}>
+              <option value="">Select town...</option>
+              {Object.keys(TOWN_COORDS).map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={{fontSize:9,color:"#444",fontFamily:"monospace",letterSpacing:1,marginBottom:4}}>RADIUS</div>
+            <select value={radiusMiles} onChange={e=>setRadiusMiles(Number(e.target.value))}
+              style={{background:"#111",border:"1px solid #333",borderRadius:5,color:"#888",padding:"7px 12px",fontSize:12,outline:"none"}}>
+              {[5,10,15,20,30,50].map(r => <option key={r} value={r}>{r} miles</option>)}
+            </select>
+          </div>
+          <button onClick={runLasso} disabled={!centerTown}
+            style={{padding:"8px 20px",background:centerTown?"#cc2222":"#222",border:"none",borderRadius:6,color:centerTown?"#fff":"#444",cursor:centerTown?"pointer":"default",fontSize:12,fontWeight:700,fontFamily:"monospace",letterSpacing:1,marginTop:16}}>
+            ⭕ LASSO ROUTE
+          </button>
+          {mode==="result" && (
+            <>
+              <div style={{marginLeft:"auto",textAlign:"right"}}>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color:"#cc2222",lineHeight:1}}>{optimized.length}</div>
+                <div style={{fontSize:8,color:"#444",fontFamily:"monospace",letterSpacing:1}}>STOPS</div>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color:"#4a9eff",lineHeight:1}}>{totalMiles().toFixed(1)}</div>
+                <div style={{fontSize:8,color:"#444",fontFamily:"monospace",letterSpacing:1}}>MILES</div>
+              </div>
+              <button onClick={()=>onAccept(optimized)} style={{padding:"8px 20px",background:"#0a3a1a",border:"1px solid #2a6a2a",borderRadius:6,color:"#4ae87a",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"monospace",letterSpacing:1,marginTop:16}}>
+                ✓ USE THIS ROUTE
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* Map + stop list */}
+        <div style={{display:"flex",flex:1,overflow:"hidden"}}>
+          <div ref={mapRef} style={{flex:1,minHeight:0}}/>
+          {mode==="result" && optimized.length > 0 && (
+            <div style={{width:220,borderLeft:"1px solid #1a1a1a",overflowY:"auto",background:"#0d0d0d",flexShrink:0}}>
+              <div style={{padding:"8px 12px",borderBottom:"1px solid #141414",fontSize:9,color:"#444",fontFamily:"monospace",letterSpacing:1}}>OPTIMIZED ORDER</div>
+              {optimized.map((c, i) => {
+                const dc = DAY_CONFIG[c.day] || DAY_CONFIG.Monday;
+                return (
+                  <div key={c.id||i} style={{padding:"8px 12px",borderBottom:"1px solid #111",display:"flex",gap:8,alignItems:"center"}}>
+                    <div style={{width:20,height:20,borderRadius:"50%",background:"#cc2222",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <span style={{fontSize:9,color:"#fff",fontWeight:700,fontFamily:"monospace"}}>{i+1}</span>
+                    </div>
+                    <div style={{flex:1,overflow:"hidden"}}>
+                      <div style={{fontSize:11,fontWeight:600,color:"#e8e8e8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
+                      <div style={{fontSize:9,color:"#555",fontFamily:"monospace"}}><span style={{color:dc.color}}>{dc.label}</span> · {c.town}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState("bids");
   const [session, setSession] = useState(() => getSession());
@@ -4051,6 +4313,7 @@ export default function App() {
           <button onClick={()=>{setRouteDraft({...userRoutes});setEditingRoutes(true);}} style={{padding:"5px 12px",background:"none",border:"1px solid #2a2a2a",borderRadius:5,color:"#555",cursor:"pointer",fontSize:11}}>
             ⚙ ROUTES
           </button>
+          <a href="/help" target="_blank" style={{padding:"5px 10px",background:"none",border:"1px solid #2a2a2a",borderRadius:5,color:"#444",cursor:"pointer",fontSize:10,fontFamily:"monospace",letterSpacing:1,textDecoration:"none"}}>?</a>
           <button onClick={signOut} style={{padding:"5px 12px",background:"none",border:"1px solid #2a2a2a",borderRadius:5,color:"#444",cursor:"pointer",fontSize:10,fontFamily:"monospace",letterSpacing:1}}>
             SIGN OUT
           </button>
