@@ -317,8 +317,9 @@ function BidTracker() {
   const [filterDay, setFilterDay]           = useState("All");
   const [sortBy, setSortBy]     = useState("bidDate");
   const [modal, setModal]       = useState(null);
-  const [showImport, setShowImport] = useState(false);
-  const [lastSync, setLastSync] = useState(null);
+  const [showImport, setShowImport]   = useState(false);
+  const [showReport, setShowReport]   = useState(false);
+  const [lastSync, setLastSync]       = useState(null);
 
   // ── Load from Supabase ─────────────────────────────────────────────────────
   const loadBids = useCallback(async (showLoader=false) => {
@@ -470,6 +471,7 @@ function BidTracker() {
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <button onClick={()=>loadBids(false)} style={{background:"#1a1a1a",border:"1px solid #2a2a44",borderRadius:6,color:"#666",padding:"7px 14px",cursor:"pointer",fontSize:12}}>↻ Refresh</button>
           <button onClick={()=>setShowImport(true)} style={{background:"#1a1a1a",border:"1px solid #2a2a44",borderRadius:6,color:"#e8e8e8",padding:"8px 16px",cursor:"pointer",fontSize:13,fontWeight:600}}>⬆ Import Data</button>
+          <button onClick={()=>setShowReport(true)} style={{background:"#1a1a1a",border:"1px solid #cc2222",borderRadius:6,color:"#cc2222",padding:"8px 16px",cursor:"pointer",fontSize:13,fontWeight:600}}>📋 Daily Report</button>
           <button onClick={()=>setModal("add")} style={{background:"#e8e8e8",border:"none",borderRadius:6,color:"#0a0a0a",padding:"9px 18px",cursor:"pointer",fontSize:13,fontWeight:700}}>+ Add Project</button>
         </div>
       </div>
@@ -501,6 +503,9 @@ function BidTracker() {
           </div>
         ))}
       </div>
+
+      {/* Pipeline Dashboard */}
+      <PipelineDashboard bids={bids} />
 
       {/* Day Route Buttons */}
       <div style={{padding:"12px 32px",display:"flex",gap:8,alignItems:"center",borderBottom:"1px solid #141420",background:"#0a0a12",flexWrap:"wrap"}}>
@@ -588,6 +593,7 @@ function BidTracker() {
 
       {modal&&<BidModal bid={modal==="add"?null:modal} onClose={()=>setModal(null)} onSave={saveBid} saving={saving}/>}
       {showImport&&<ImportModal onClose={()=>setShowImport(false)} onImport={importBids} importing={importing}/>}
+      {showReport&&<DailyReportModal onClose={()=>setShowReport(false)}/>}
     </div>
   );
 }
@@ -625,7 +631,7 @@ const STATE_OPTIONS = ["CT","MA"];
 const TYPE_ICONS = { GC:"🏗", Excavation:"⛏", Paving:"🚧", Roofing:"🏠", Industrial:"🏭", Other:"📍" };
 const PRIORITY_COLORS_MAP = { High:"#e8e8e8", Medium:"#4a9eff", Low:"#555" };
 
-const BLANK_COMPANY = { name:"", day:"Monday", type:"GC", lat:"", lng:"", town:"", state:"CT", phone:"", notes:"", priority:"Medium", website:"", contact:"" };
+const BLANK_COMPANY = { name:"", day:"Monday", type:"GC", lat:"", lng:"", town:"", state:"CT", phone:"", email:"", notes:"", priority:"Medium", website:"", contact:"" };
 
 function CompanyModal({ company, onClose, onSave, saving }) {
   const [form, setForm] = useState(company || BLANK_COMPANY);
@@ -678,6 +684,13 @@ function CompanyModal({ company, onClose, onSave, saving }) {
             <label style={{color:"#888",fontSize:10,letterSpacing:1,display:"block",marginBottom:5,fontFamily:"monospace"}}>CONTACT NAME</label>
             <input value={form.contact||""} onChange={e=>set("contact",e.target.value)} placeholder="e.g. Mike Smith"
               style={{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:"#f5f5f5",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+          </div>
+
+          {/* Email */}
+          <div style={{gridColumn:"1 / -1"}}>
+            <label style={{color:"#888",fontSize:10,letterSpacing:1,display:"block",marginBottom:5,fontFamily:"monospace"}}>EMAIL <span style={{color:"#444"}}>(optional)</span></label>
+            <input type="email" value={form.email||""} onChange={e=>set("email",e.target.value)} placeholder="contact@company.com"
+              style={{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:"#4a9eff",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
           </div>
 
           {/* Town */}
@@ -769,9 +782,10 @@ function TerritoryMap() {
   const [search, setSearch]         = useState("");
   const [selected, setSelected]     = useState(null);
   const [modal, setModal]           = useState(null);
-  const [mapReady, setMapReady] = useState(false);
+  const [mapReady, setMapReady]         = useState(false);
+  const [followUpTarget, setFollowUpTarget] = useState(null);
   const mapDivRef  = useRef(null);
-  const leafletRef = useRef(null); // holds { map, markers }
+  const leafletRef = useRef(null);
   const cssReadyRef = useRef(false);
 
   // ── 1. Lazy init map only when tab is visible ────────────────────────────
@@ -947,7 +961,7 @@ function TerritoryMap() {
     const payload = {
       user_id:getUserId(), name:form.name, day:form.day, type:form.type, lat, lng,
       town:form.town, state:form.state, phone:form.phone,
-      notes:form.notes, priority:form.priority,
+      email:form.email||null, notes:form.notes, priority:form.priority,
       website:form.website||null, contact:form.contact||null
     };
     try {
@@ -1060,6 +1074,7 @@ function TerritoryMap() {
                           <span style={{fontSize:11}}>{TYPE_ICONS[c.type]||"🏗"}</span>
                           <span style={{fontWeight:600,fontSize:12,color:isSel?dc.color:"#f5f5f5",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</span>
                           <div style={{display:"flex",gap:3,flexShrink:0}}>
+                            <button onClick={e=>{e.stopPropagation();setFollowUpTarget(c);}} style={{background:"none",border:"1px solid #1a3a1a",borderRadius:3,color:"#3a6a3a",cursor:"pointer",fontSize:9,padding:"1px 5px"}} title="Set follow-up">⏰</button>
                             <button onClick={e=>{e.stopPropagation();setModal(c);}} style={{background:"none",border:"1px solid #333",borderRadius:3,color:"#555",cursor:"pointer",fontSize:9,padding:"1px 5px"}}>✎</button>
                             <button onClick={e=>{e.stopPropagation();deleteCompany(c.id);}} style={{background:"none",border:"1px solid #2a1a1a",borderRadius:3,color:"#553333",cursor:"pointer",fontSize:9,padding:"1px 5px"}}>✕</button>
                           </div>
@@ -1069,12 +1084,16 @@ function TerritoryMap() {
                           {c.phone&&<span style={{color:"#aaaaaa",opacity:.8,marginLeft:8}}>{c.phone}</span>}
                         </div>
                         {isSel&&c.notes&&<div style={{fontSize:10,color:"#555",marginTop:3,fontStyle:"italic"}}>{c.notes.slice(0,80)}</div>}
-                        {isSel&&c.lat&&c.lng&&(
-                          <div style={{display:"flex",gap:6,marginTop:6}}>
-                            <a href={`https://waze.com/ul?ll=${c.lat},${c.lng}&navigate=yes`} target="_blank" rel="noreferrer"
-                              style={{flex:1,padding:"5px",background:"#05c8f7",borderRadius:5,color:"#000",fontWeight:700,fontSize:10,textDecoration:"none",textAlign:"center"}}>🚗 Waze</a>
-                            <a href={`https://maps.google.com/?q=${c.lat},${c.lng}`} target="_blank" rel="noreferrer"
-                              style={{flex:1,padding:"5px",background:"#1a1a1a",border:"1px solid #333",borderRadius:5,color:"#888",fontSize:10,textDecoration:"none",textAlign:"center"}}>🗺 Maps</a>
+                        {isSel&&(
+                          <div style={{display:"flex",gap:6,marginTop:6,flexWrap:"wrap"}}>
+                            {c.lat&&c.lng&&<a href={`https://waze.com/ul?ll=${c.lat},${c.lng}&navigate=yes`} target="_blank" rel="noreferrer"
+                              style={{flex:1,padding:"5px",background:"#05c8f7",borderRadius:5,color:"#000",fontWeight:700,fontSize:10,textDecoration:"none",textAlign:"center",minWidth:60}}>🚗 Waze</a>}
+                            {c.lat&&c.lng&&<a href={`https://maps.google.com/?q=${c.lat},${c.lng}`} target="_blank" rel="noreferrer"
+                              style={{flex:1,padding:"5px",background:"#1a1a1a",border:"1px solid #333",borderRadius:5,color:"#888",fontSize:10,textDecoration:"none",textAlign:"center",minWidth:60}}>🗺 Maps</a>}
+                            {c.email&&<a href={`mailto:${c.email}`}
+                              style={{flex:1,padding:"5px",background:"#1a1a1a",border:"1px solid #333",borderRadius:5,color:"#4a9eff",fontSize:10,textDecoration:"none",textAlign:"center",minWidth:60}}>✉ Email</a>}
+                            {c.phone&&<a href={`tel:${c.phone}`}
+                              style={{flex:1,padding:"5px",background:"#1a1a1a",border:"1px solid #333",borderRadius:5,color:"#aaa",fontSize:10,textDecoration:"none",textAlign:"center",minWidth:60}}>📞 Call</a>}
                           </div>
                         )}
                       </div>
@@ -1133,6 +1152,7 @@ function TerritoryMap() {
       </div>
 
       {modal&&<CompanyModal company={modal==="add"?null:modal} onClose={()=>setModal(null)} onSave={saveCompany} saving={saving}/>}
+      {followUpTarget&&<FollowUpModal company={followUpTarget} onClose={()=>setFollowUpTarget(null)} onSave={()=>{}}/>}
     </div>
   );
 }
@@ -1488,18 +1508,2377 @@ function ActivityLog() {
   );
 }
 
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  ROUTE PLANNER  (Click-to-plan, save & launch in Waze/Maps)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function RoutePlanner() {
+  const [companies, setCompanies]   = useState([]);
+  const [stops, setStops]           = useState([]);       // ordered array of company objects
+  const [savedRoutes, setSavedRoutes] = useState([]);
+  const [routeName, setRouteName]   = useState("");
+  const [saving, setSaving]         = useState(false);
+  const [loading, setLoading]       = useState(true);
+  const [activeDay, setActiveDay]   = useState("All");
+  const [mapReady, setMapReady]     = useState(false);
+  const [viewRoute, setViewRoute]   = useState(null);     // saved route being previewed
+  const mapDivRef  = useRef(null);
+  const leafletRef = useRef(null);
+
+  // ── Load companies from cache then Supabase ───────────────────
+  useEffect(() => {
+    const cacheKey = `companies_${getUserId()}`;
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      try { setCompanies(JSON.parse(cached)); setLoading(false); } catch {}
+    }
+    const token = JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY;
+    fetch(`${SUPABASE_URL}/rest/v1/companies?select=*&user_id=eq.${getUserId()}&order=id.asc&limit=1000`, {
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}` }
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (Array.isArray(data)) {
+        setCompanies(data);
+        localStorage.setItem(cacheKey, JSON.stringify(data));
+      }
+      setLoading(false);
+    })
+    .catch(() => setLoading(false));
+  }, []);
+
+  // ── Load saved routes ─────────────────────────────────────────
+  useEffect(() => {
+    const token = JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY;
+    fetch(`${SUPABASE_URL}/rest/v1/user_settings?user_id=eq.${getUserId()}&key=like.route_%&order=created_at.desc&limit=50`, {
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}` }
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (Array.isArray(d)) {
+        setSavedRoutes(d.map(r => {
+          try { return { id: r.id, key: r.key, ...JSON.parse(r.value) }; }
+          catch { return null; }
+        }).filter(Boolean));
+      }
+    })
+    .catch(() => {});
+  }, []);
+
+  // ── Init Leaflet map ──────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+
+    function initMap() {
+      if (cancelled || !mapDivRef.current || leafletRef.current) return;
+      if (mapDivRef.current.offsetWidth === 0) {
+        setTimeout(() => { if (!cancelled) initMap(); }, 300);
+        return;
+      }
+      const L = window.L;
+      if (!L) return;
+
+      delete L.Icon.Default.prototype._getIconUrl;
+      L.Icon.Default.mergeOptions({
+        iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
+        iconUrl:       "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
+        shadowUrl:     "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
+      });
+
+      const map = L.map(mapDivRef.current, { center: [42.05, -73.15], zoom: 8 });
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        attribution: "© CARTO", maxZoom: 19
+      }).addTo(map);
+
+      leafletRef.current = {
+        map,
+        companyLayer: L.layerGroup().addTo(map),
+        routeLayer:   L.layerGroup().addTo(map),
+      };
+      setTimeout(() => { map.invalidateSize(true); }, 100);
+      setTimeout(() => { map.invalidateSize(true); }, 500);
+      setMapReady(true);
+    }
+
+    if (window.L && mapDivRef.current) initMap();
+    const poll = setInterval(() => {
+      if (cancelled) { clearInterval(poll); return; }
+      if (window.L && mapDivRef.current && !leafletRef.current) initMap();
+      if (leafletRef.current) clearInterval(poll);
+    }, 200);
+
+    return () => { cancelled = true; clearInterval(poll); };
+  }, []);
+
+  // ── Render company pins + route on map ────────────────────────
+  useEffect(() => {
+    if (!mapReady || !leafletRef.current) return;
+    const { map, companyLayer, routeLayer } = leafletRef.current;
+    const L = window.L;
+    if (!L) return;
+
+    companyLayer.clearLayers();
+    routeLayer.clearLayers();
+
+    const filtered = companies.filter(c => {
+      if (!c.lat || !c.lng) return false;
+      if (activeDay !== "All" && c.day !== activeDay) return false;
+      return true;
+    });
+
+    const stopIds = stops.map(s => s.id);
+
+    filtered.forEach(c => {
+      const isStop = stopIds.includes(c.id);
+      const stopIdx = stopIds.indexOf(c.id);
+      const dc = DAY_CONFIG[c.day] || DAY_CONFIG.Monday;
+      const color = isStop ? "#cc2222" : dc.color;
+
+      const icon = L.divIcon({
+        className: "",
+        iconSize: isStop ? [28, 36] : [18, 24],
+        iconAnchor: isStop ? [14, 36] : [9, 24],
+        popupAnchor: [0, -38],
+        html: isStop
+          ? `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
+              <path d="M14 0C6.3 0 0 6.3 0 14c0 10.5 14 22 14 22s14-11.5 14-22C28 6.3 21.7 0 14 0z" fill="#cc2222"/>
+              <circle cx="14" cy="14" r="8" fill="#0a0a0a"/>
+              <text x="14" y="18" text-anchor="middle" font-size="9" fill="#fff" font-weight="bold" font-family="Arial,sans-serif">${stopIdx + 1}</text>
+            </svg>`
+          : `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="24" viewBox="0 0 18 24">
+              <path d="M9 0C4 0 0 4 0 9c0 6.75 9 15 9 15s9-8.25 9-15C18 4 14 0 9 0z" fill="${color}" opacity="0.7"/>
+              <circle cx="9" cy="9" r="4" fill="#0a0a0a"/>
+            </svg>`,
+      });
+
+      const marker = L.marker([c.lat, c.lng], { icon });
+
+      marker.on("click", () => {
+        setStops(prev => {
+          const exists = prev.find(s => s.id === c.id);
+          if (exists) {
+            // Remove from route
+            return prev.filter(s => s.id !== c.id);
+          } else {
+            // Add to route
+            return [...prev, c];
+          }
+        });
+      });
+
+      marker.bindTooltip(`<div style="font-family:monospace;font-size:11px;background:#111;color:#f5f5f5;padding:4px 8px;border-radius:4px;border:1px solid #333">${isStop ? `#${stopIdx+1} · ` : ""}${c.name}<br><span style="color:#666;font-size:9px">${c.town} · click to ${isStop?"remove":"add"}</span></div>`, {
+        permanent: false, direction: "top", className: "rp-tip"
+      });
+
+      companyLayer.addLayer(marker);
+    });
+
+    // Draw route line between stops
+    if (stops.length >= 2) {
+      const coords = stops.filter(s => s.lat && s.lng).map(s => [s.lat, s.lng]);
+      L.polyline(coords, {
+        color: "#cc2222",
+        weight: 2.5,
+        opacity: 0.7,
+        dashArray: "6 5",
+      }).addTo(routeLayer);
+    }
+
+    setTimeout(() => map.invalidateSize(), 50);
+  }, [companies, stops, activeDay, mapReady]);
+
+  // ── Build navigation URLs ─────────────────────────────────────
+  const buildWazeUrl = () => {
+    const valid = stops.filter(s => s.lat && s.lng);
+    if (valid.length === 0) return null;
+    if (valid.length === 1) {
+      return `https://waze.com/ul?ll=${valid[0].lat},${valid[0].lng}&navigate=yes`;
+    }
+    // Waze supports: first stop + up to 3 waypoints via app deeplink
+    const dest = valid[valid.length - 1];
+    const waypoints = valid.slice(0, -1).map(s => `${s.lat},${s.lng}`).join("|");
+    return `https://waze.com/ul?ll=${dest.lat},${dest.lng}&navigate=yes&waypoints=${waypoints}`;
+  };
+
+  const buildGoogleMapsUrl = () => {
+    const valid = stops.filter(s => s.lat && s.lng);
+    if (valid.length === 0) return null;
+    const origin = valid[0];
+    const dest = valid[valid.length - 1];
+    const waypoints = valid.slice(1, -1).map(s => `${s.lat},${s.lng}`).join("|");
+    let url = `https://www.google.com/maps/dir/?api=1&origin=${origin.lat},${origin.lng}&destination=${dest.lat},${dest.lng}&travelmode=driving`;
+    if (waypoints) url += `&waypoints=${waypoints}`;
+    return url;
+  };
+
+  // ── Save route ────────────────────────────────────────────────
+  const saveRoute = async () => {
+    if (stops.length === 0 || !routeName.trim()) return;
+    setSaving(true);
+    const token = JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY;
+    const key = `route_${Date.now()}`;
+    const value = JSON.stringify({
+      name: routeName.trim(),
+      stops: stops.map(s => ({ id: s.id, name: s.name, town: s.town, lat: s.lat, lng: s.lng, phone: s.phone })),
+      date: new Date().toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" }),
+      stopCount: stops.length,
+    });
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/user_settings`, {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "Prefer": "return=representation",
+        },
+        body: JSON.stringify({ user_id: getUserId(), key, value }),
+      });
+      setSavedRoutes(prev => [{ key, name: routeName.trim(), stops: stops.map(s => ({ id: s.id, name: s.name, town: s.town, lat: s.lat, lng: s.lng, phone: s.phone })), date: new Date().toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" }), stopCount: stops.length }, ...prev]);
+      setRouteName("");
+      alert(`Route "${routeName.trim()}" saved!`);
+    } catch(e) { alert("Save failed: " + e.message); }
+    setSaving(false);
+  };
+
+  // ── Delete saved route ────────────────────────────────────────
+  const deleteRoute = async (key) => {
+    if (!confirm("Delete this route?")) return;
+    const token = JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY;
+    await fetch(`${SUPABASE_URL}/rest/v1/user_settings?user_id=eq.${getUserId()}&key=eq.${key}`, {
+      method: "DELETE",
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}` },
+    });
+    setSavedRoutes(prev => prev.filter(r => r.key !== key));
+    if (viewRoute?.key === key) setViewRoute(null);
+  };
+
+  // ── Load saved route onto map ─────────────────────────────────
+  const loadRoute = (route) => {
+    setViewRoute(route);
+    // Match saved stop IDs to current companies for full data
+    const matched = route.stops.map(s => companies.find(c => c.id === s.id) || s);
+    setStops(matched);
+  };
+
+  const wazeUrl = buildWazeUrl();
+  const mapsUrl = buildGoogleMapsUrl();
+
+  if (loading) return (
+    <div style={{height:"calc(100vh - 54px)",background:"#0a0a0a",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{color:"#e8e8e8",fontFamily:"'Bebas Neue',sans-serif",fontSize:24,letterSpacing:3}}>LOADING...</div>
+    </div>
+  );
+
+  return (
+    <div style={{background:"#0a0a0a",color:"#f5f5f5",fontFamily:"'DM Sans',sans-serif"}}>
+      <style>{`.rp-tip { background: transparent !important; border: none !important; box-shadow: none !important; }`}</style>
+
+      {/* ── Filter bar ── */}
+      <div style={{background:"#0d0d0d",borderBottom:"1px solid #1a1a1a",padding:"10px 24px",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+        <span style={{color:"#444",fontSize:10,fontFamily:"monospace",letterSpacing:2}}>FILTER BY DAY:</span>
+        <button onClick={()=>setActiveDay("All")} style={{padding:"5px 12px",borderRadius:5,border:`1px solid ${activeDay==="All"?"#e8e8e8":"#222"}`,background:activeDay==="All"?"#1a1a1a":"transparent",color:activeDay==="All"?"#fff":"#444",cursor:"pointer",fontSize:11,fontWeight:700}}>ALL</button>
+        {Object.entries(DAY_CONFIG).map(([day,dc])=>{
+          const active = activeDay===day;
+          return (
+            <button key={day} onClick={()=>setActiveDay(active?"All":day)}
+              style={{padding:"5px 12px",borderRadius:5,border:`1px solid ${active?dc.color:dc.border}`,background:active?dc.bg:"transparent",color:active?dc.color:dc.border,cursor:"pointer",fontSize:11,fontWeight:700,boxShadow:active?`0 0 8px ${dc.color}44`:"none"}}>
+              {dc.label} <span style={{opacity:.5,fontSize:9}}>{dc.desc}</span>
+            </button>
+          );
+        })}
+        <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
+          <span style={{fontSize:10,color:"#444",fontFamily:"monospace"}}>
+            {stops.length} STOP{stops.length!==1?"S":""} PLANNED
+          </span>
+          {stops.length > 0 && (
+            <button onClick={()=>setStops([])} style={{padding:"5px 10px",background:"none",border:"1px solid #2a2a2a",borderRadius:5,color:"#555",cursor:"pointer",fontSize:10,fontFamily:"monospace"}}>
+              CLEAR
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Main layout ── */}
+      <div style={{display:"flex",height:"calc(100vh - 110px)"}}>
+
+        {/* ── Left sidebar: stop list + saved routes ── */}
+        <div style={{width:300,background:"#0d0d0d",borderRight:"1px solid #1a1a1a",display:"flex",flexDirection:"column",overflow:"hidden",flexShrink:0}}>
+
+          {/* Current route stops */}
+          <div style={{borderBottom:"1px solid #1a1a1a",flex:stops.length>0?1:0,overflow:"auto",minHeight:stops.length>0?120:0,transition:"all .2s"}}>
+            <div style={{padding:"8px 12px",background:"#0a0a0a",borderBottom:"1px solid #151515",display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:9,color:"#cc2222",fontFamily:"monospace",letterSpacing:2,fontWeight:700}}>CURRENT ROUTE</span>
+              <span style={{fontSize:9,color:"#333",fontFamily:"monospace",marginLeft:"auto"}}>{stops.length} stops</span>
+            </div>
+            {stops.length === 0 ? (
+              <div style={{padding:"20px 12px",fontSize:11,color:"#2a2a2a",fontFamily:"monospace",textAlign:"center",lineHeight:1.8}}>
+                Click pins on the map<br/>to build your route
+              </div>
+            ) : (
+              stops.map((s, i) => (
+                <div key={s.id||i} style={{padding:"8px 12px",borderBottom:"1px solid #141414",display:"flex",alignItems:"center",gap:8}}>
+                  <div style={{width:20,height:20,borderRadius:"50%",background:"#cc2222",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <span style={{fontSize:9,color:"#fff",fontWeight:700,fontFamily:"monospace"}}>{i+1}</span>
+                  </div>
+                  <div style={{flex:1,overflow:"hidden"}}>
+                    <div style={{fontSize:11,fontWeight:600,color:"#e8e8e8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</div>
+                    <div style={{fontSize:9,color:"#555",fontFamily:"monospace"}}>{s.town}</div>
+                  </div>
+                  <div style={{display:"flex",gap:4,flexShrink:0}}>
+                    {i > 0 && (
+                      <button onClick={()=>setStops(prev=>{const a=[...prev];[a[i-1],a[i]]=[a[i],a[i-1]];return a;})}
+                        style={{background:"none",border:"1px solid #222",borderRadius:3,color:"#444",cursor:"pointer",fontSize:10,padding:"1px 4px"}}>↑</button>
+                    )}
+                    {i < stops.length-1 && (
+                      <button onClick={()=>setStops(prev=>{const a=[...prev];[a[i],a[i+1]]=[a[i+1],a[i]];return a;})}
+                        style={{background:"none",border:"1px solid #222",borderRadius:3,color:"#444",cursor:"pointer",fontSize:10,padding:"1px 4px"}}>↓</button>
+                    )}
+                    <button onClick={()=>setStops(prev=>prev.filter((_,j)=>j!==i))}
+                      style={{background:"none",border:"1px solid #2a1a1a",borderRadius:3,color:"#553333",cursor:"pointer",fontSize:9,padding:"1px 4px"}}>✕</button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Launch + Save */}
+          {stops.length > 0 && (
+            <div style={{padding:"10px 12px",borderBottom:"1px solid #1a1a1a",background:"#0a0a0a"}}>
+              <div style={{display:"flex",gap:6,marginBottom:8}}>
+                {wazeUrl && (
+                  <a href={wazeUrl} target="_blank" rel="noreferrer"
+                    style={{flex:1,padding:"9px 0",background:"#05c8f7",borderRadius:6,color:"#000",fontWeight:700,fontSize:12,textDecoration:"none",textAlign:"center",display:"block"}}>
+                    🚗 Waze
+                  </a>
+                )}
+                {mapsUrl && (
+                  <a href={mapsUrl} target="_blank" rel="noreferrer"
+                    style={{flex:1,padding:"9px 0",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:"#888",fontSize:12,textDecoration:"none",textAlign:"center",display:"block"}}>
+                    🗺 Maps
+                  </a>
+                )}
+              </div>
+              <div style={{display:"flex",gap:6}}>
+                <input
+                  value={routeName}
+                  onChange={e=>setRouteName(e.target.value)}
+                  placeholder="Name this route..."
+                  style={{flex:1,background:"#111",border:"1px solid #2a2a2a",borderRadius:5,color:"#e8e8e8",padding:"6px 8px",fontSize:11,outline:"none",fontFamily:"'DM Sans',sans-serif"}}
+                />
+                <button onClick={saveRoute} disabled={!routeName.trim()||saving}
+                  style={{padding:"6px 10px",background:routeName.trim()?"#cc2222":"#1a1a1a",border:"none",borderRadius:5,color:routeName.trim()?"#fff":"#444",cursor:routeName.trim()?"pointer":"default",fontSize:11,fontWeight:700,flexShrink:0}}>
+                  {saving?"...":"Save"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Saved routes */}
+          <div style={{flex:1,overflowY:"auto"}}>
+            <div style={{padding:"8px 12px",background:"#0a0a0a",borderBottom:"1px solid #151515",position:"sticky",top:0}}>
+              <span style={{fontSize:9,color:"#444",fontFamily:"monospace",letterSpacing:2}}>SAVED ROUTES ({savedRoutes.length})</span>
+            </div>
+            {savedRoutes.length === 0 ? (
+              <div style={{padding:"20px 12px",fontSize:10,color:"#252525",fontFamily:"monospace",textAlign:"center"}}>No saved routes yet</div>
+            ) : (
+              savedRoutes.map(route => (
+                <div key={route.key} style={{padding:"10px 12px",borderBottom:"1px solid #141414",background:viewRoute?.key===route.key?"#110a0a":"transparent"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                    <span style={{fontSize:12,fontWeight:600,color:"#e8e8e8",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{route.name}</span>
+                    <button onClick={()=>deleteRoute(route.key)} style={{background:"none",border:"none",color:"#333",cursor:"pointer",fontSize:10,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#cc2222"} onMouseLeave={e=>e.currentTarget.style.color="#333"}>✕</button>
+                  </div>
+                  <div style={{fontSize:9,color:"#444",fontFamily:"monospace",marginBottom:6}}>{route.date} · {route.stopCount||route.stops?.length||0} stops</div>
+                  <div style={{display:"flex",gap:5}}>
+                    <button onClick={()=>loadRoute(route)}
+                      style={{flex:1,padding:"5px 0",background:"#1a1a1a",border:"1px solid #cc2222",borderRadius:4,color:"#cc2222",cursor:"pointer",fontSize:10,fontFamily:"monospace",letterSpacing:1}}>
+                      LOAD
+                    </button>
+                    {route.stops?.length > 0 && route.stops[0].lat && (
+                      <a href={`https://www.google.com/maps/dir/?api=1&origin=${route.stops[0].lat},${route.stops[0].lng}&destination=${route.stops[route.stops.length-1].lat},${route.stops[route.stops.length-1].lng}&travelmode=driving${route.stops.length>2?"&waypoints="+route.stops.slice(1,-1).map(s=>`${s.lat},${s.lng}`).join("|"):""}`}
+                        target="_blank" rel="noreferrer"
+                        style={{flex:1,padding:"5px 0",background:"#05c8f7",borderRadius:4,color:"#000",fontWeight:700,fontSize:10,textDecoration:"none",textAlign:"center",display:"block"}}>
+                        GO
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* ── Map ── */}
+        <div style={{flex:1,position:"relative",overflow:"hidden"}}>
+          <div ref={mapDivRef} style={{width:"100%",height:"100%",minHeight:"400px"}}/>
+
+          {/* Instructions overlay — shown when no stops yet */}
+          {stops.length === 0 && mapReady && (
+            <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:"rgba(10,10,10,0.85)",border:"1px solid #1e1e1e",borderRadius:10,padding:"20px 28px",textAlign:"center",pointerEvents:"none",zIndex:900}}>
+              <div style={{fontSize:28,marginBottom:8}}>📍</div>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,letterSpacing:3,color:"#e8e8e8",marginBottom:6}}>PLAN YOUR ROUTE</div>
+              <div style={{fontSize:11,color:"#555",lineHeight:1.7,fontFamily:"monospace"}}>
+                Click any pin to add it as a stop.<br/>
+                Click again to remove it.<br/>
+                Use ↑↓ in the sidebar to reorder.
+              </div>
+            </div>
+          )}
+
+          {/* Legend */}
+          <div style={{position:"absolute",top:12,right:12,background:"rgba(10,10,10,0.92)",border:"1px solid #1e1e1e",borderRadius:8,padding:"10px 14px",zIndex:1000,pointerEvents:"none"}}>
+            <div style={{color:"#444",fontSize:9,fontFamily:"monospace",letterSpacing:1,marginBottom:6}}>ROUTE PLANNER</div>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+              <div style={{width:10,height:10,borderRadius:"50%",background:"#cc2222"}}/>
+              <span style={{fontSize:10,color:"#cc2222",fontFamily:"monospace"}}>Route stop (numbered)</span>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+              <div style={{width:8,height:8,borderRadius:"50%",background:"#4a9eff",opacity:0.7}}/>
+              <span style={{fontSize:10,color:"#555",fontFamily:"monospace"}}>Available company</span>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={{width:14,height:2,background:"#cc2222",opacity:0.7,borderTop:"2px dashed #cc2222"}}/>
+              <span style={{fontSize:10,color:"#555",fontFamily:"monospace"}}>Planned route</span>
+            </div>
+            {stops.length > 0 && (
+              <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid #1a1a1a",fontSize:9,color:"#cc2222",fontFamily:"monospace",letterSpacing:1}}>
+                {stops.length} STOP{stops.length!==1?"S":""} PLANNED
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  CHECK-IN  (GPS-verified rep location tracking)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// Haversine distance in feet between two lat/lng points
+function distanceFeet(lat1, lng1, lat2, lng2) {
+  const R = 20925524; // Earth radius in feet
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 +
+    Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+const CHECK_IN_RADIUS_FT = 1000; // within 1000 feet = valid check-in
+
+function CheckIn() {
+  const [companies, setCompanies]     = useState([]);
+  const [checkIns, setCheckIns]       = useState([]);
+  const [allCheckIns, setAllCheckIns] = useState([]);
+  const [isManager, setIsManager]     = useState(false);
+  const [loading, setLoading]         = useState(true);
+  const [locating, setLocating]       = useState(false);
+  const [activeDay, setActiveDay]     = useState("All");
+  const [search, setSearch]           = useState("");
+  const [filterRep, setFilterRep]     = useState("All");
+  const [filterDate, setFilterDate]   = useState("");
+  const [currentPos, setCurrentPos]   = useState(null);
+  const [posError, setPosError]       = useState(null);
+  const [checkingIn, setCheckingIn]   = useState(null); // company id being checked in
+  const [successId, setSuccessId]     = useState(null); // recently checked in company id
+  const [activeTab, setActiveTab]     = useState("checkin"); // checkin | history
+  const [checkInFormTarget, setCheckInFormTarget] = useState(null);
+
+  const token = JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY;
+
+  // ── Check if manager ─────────────────────────────────────────
+  useEffect(() => {
+    const uid = getUserId();
+    if (!uid) return;
+    fetch(`${SUPABASE_URL}/rest/v1/user_settings?user_id=eq.${uid}&key=eq.role&select=value`, {
+      headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`}
+    })
+    .then(r => r.json())
+    .then(d => { if (d?.[0]?.value === "manager") setIsManager(true); })
+    .catch(() => {});
+  }, []);
+
+  // ── Load companies ────────────────────────────────────────────
+  useEffect(() => {
+    const cacheKey = `companies_${getUserId()}`;
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      try { setCompanies(JSON.parse(cached)); } catch {}
+    }
+    fetch(`${SUPABASE_URL}/rest/v1/companies?select=*&user_id=eq.${getUserId()}&order=id.asc&limit=1000`, {
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}` }
+    })
+    .then(r => r.json())
+    .then(data => { if (Array.isArray(data)) setCompanies(data); })
+    .catch(() => {});
+  }, []);
+
+  // ── Load check-ins ────────────────────────────────────────────
+  const loadCheckIns = async () => {
+    const uid = getUserId();
+    // Own check-ins
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/check_ins?user_id=eq.${uid}&order=checked_in_at.desc&limit=200`, {
+      headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`}
+    });
+    const d = await r.json();
+    setCheckIns(Array.isArray(d) ? d : []);
+
+    // Manager: all check-ins
+    if (isManager) {
+      const r2 = await fetch(`${SUPABASE_URL}/rest/v1/check_ins?order=checked_in_at.desc&limit=1000`, {
+        headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`}
+      });
+      const d2 = await r2.json();
+      setAllCheckIns(Array.isArray(d2) ? d2 : []);
+    }
+  };
+
+  useEffect(() => {
+    loadCheckIns().finally(() => setLoading(false));
+  }, [isManager]);
+
+  // ── Get current GPS position ──────────────────────────────────
+  const getPosition = () => new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Geolocation not supported on this device."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+      err => reject(new Error(err.code === 1 ? "Location permission denied. Enable in browser settings." :
+                              err.code === 2 ? "Location unavailable. Try again." :
+                              "Location timed out. Try again.")),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  });
+
+  // ── Manual check-in ───────────────────────────────────────────
+  const handleCheckIn = async (company) => {
+    setCheckingIn(company.id);
+    setPosError(null);
+    setLocating(true);
+
+    try {
+      const pos = await getPosition();
+      setCurrentPos(pos);
+      setLocating(false);
+
+      if (!company.lat || !company.lng) {
+        // No coords on file — check in without distance verification
+        await submitCheckIn(company, pos, null, "no_coords");
+        return;
+      }
+
+      const dist = distanceFeet(pos.lat, pos.lng, company.lat, company.lng);
+      const verified = dist <= CHECK_IN_RADIUS_FT;
+      await submitCheckIn(company, pos, Math.round(dist), verified ? "verified" : "out_of_range");
+
+    } catch(e) {
+      setPosError(e.message);
+      setLocating(false);
+    } finally {
+      setCheckingIn(null);
+    }
+  };
+
+  const submitCheckIn = async (company, pos, distFt, status) => {
+    const uid = getUserId();
+    let repName = "Rep", repEmail = "";
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      repEmail = payload.email || "";
+      repName = payload.user_metadata?.full_name || repEmail.split("@")[0] || "Rep";
+    } catch {}
+
+    const body = {
+      user_id:        uid,
+      rep_name:       repName,
+      rep_email:      repEmail,
+      company_id:     company.id,
+      company_name:   company.name,
+      company_town:   company.town,
+      company_lat:    company.lat || null,
+      company_lng:    company.lng || null,
+      rep_lat:        pos.lat,
+      rep_lng:        pos.lng,
+      gps_accuracy_m: Math.round(pos.accuracy || 0),
+      distance_ft:    distFt,
+      status:         status,
+      checked_in_at:  new Date().toISOString(),
+      notes:          "",
+    };
+
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/check_ins`, {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "Prefer": "return=minimal",
+        },
+        body: JSON.stringify(body),
+      });
+      setSuccessId(company.id);
+      setTimeout(() => setSuccessId(null), 3000);
+      await loadCheckIns();
+    } catch(e) {
+      alert("Check-in failed: " + e.message);
+    }
+  };
+
+  // ── Helpers ───────────────────────────────────────────────────
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  const filteredCompanies = companies.filter(c => {
+    if (activeDay !== "All" && c.day !== activeDay) return false;
+    if (search && !c.name?.toLowerCase().includes(search.toLowerCase()) &&
+        !c.town?.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
+  const todayCheckIns = checkIns.filter(c => c.checked_in_at?.startsWith(todayStr));
+
+  const historyData = isManager ? allCheckIns : checkIns;
+  const filteredHistory = historyData.filter(ci => {
+    if (filterRep !== "All" && ci.rep_name !== filterRep) return false;
+    if (filterDate && !ci.checked_in_at?.startsWith(filterDate)) return false;
+    return true;
+  });
+
+  const repList = ["All", ...new Set(allCheckIns.map(r => r.rep_name).filter(Boolean))];
+
+  const fmtTime = (iso) => {
+    if (!iso) return "";
+    try { return new Date(iso).toLocaleTimeString("en-US", {hour:"numeric", minute:"2-digit", hour12:true}); }
+    catch { return ""; }
+  };
+
+  const fmtDateShort = (iso) => {
+    if (!iso) return "";
+    try { return new Date(iso).toLocaleDateString("en-US", {month:"short", day:"numeric"}); }
+    catch { return ""; }
+  };
+
+  const statusStyle = (s) => ({
+    verified:    { color:"#4ae87a", bg:"#0a1a0f", border:"#1a6b35", label:"✓ VERIFIED" },
+    out_of_range:{ color:"#e8873a", bg:"#1a0d00", border:"#6b3010", label:"⚠ FAR" },
+    no_coords:   { color:"#888",    bg:"#1a1a1a", border:"#333",    label:"• LOGGED" },
+  }[s] || { color:"#888", bg:"#111", border:"#222", label:s?.toUpperCase()||"?" });
+
+  // Check if already checked in today
+  const checkedInToday = (companyId) => todayCheckIns.some(ci => ci.company_id === companyId);
+
+  if (loading) return (
+    <div style={{height:"calc(100vh - 54px)",background:"#0a0a0a",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{color:"#e8e8e8",fontFamily:"'Bebas Neue',sans-serif",fontSize:24,letterSpacing:3}}>LOADING...</div>
+    </div>
+  );
+
+  return (
+    <div style={{background:"#0a0a0a",color:"#f5f5f5",fontFamily:"'DM Sans',sans-serif",minHeight:"calc(100vh - 54px)"}}>
+
+      {/* ── Header ── */}
+      <div style={{background:"#0d0d0d",borderBottom:"1px solid #1a1a1a",padding:"10px 24px",display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,letterSpacing:3,color:"#e8e8e8"}}>CHECK-IN</div>
+        <div style={{fontSize:10,color:"#444",fontFamily:"monospace",letterSpacing:2}}>GPS-VERIFIED SITE VISITS</div>
+
+        {/* Tab toggle */}
+        <div style={{display:"flex",gap:0,background:"#111",border:"1px solid #1a1a1a",borderRadius:6,overflow:"hidden",marginLeft:16}}>
+          {[["checkin","📍 Check In"],["history","📋 History"]].map(([tab,label])=>(
+            <button key={tab} onClick={()=>setActiveTab(tab)}
+              style={{padding:"6px 16px",background:activeTab===tab?"#1a1a1a":"transparent",border:"none",color:activeTab===tab?"#e8e8e8":"#444",cursor:"pointer",fontSize:11,fontFamily:"monospace",letterSpacing:1,borderRight:"1px solid #1a1a1a"}}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{marginLeft:"auto",display:"flex",gap:12,alignItems:"center"}}>
+          {/* Today's stats */}
+          <div style={{textAlign:"center"}}>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color:"#4ae87a",lineHeight:1}}>{todayCheckIns.length}</div>
+            <div style={{fontSize:8,color:"#444",fontFamily:"monospace",letterSpacing:1}}>TODAY</div>
+          </div>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color:"#4a9eff",lineHeight:1}}>{checkIns.length}</div>
+            <div style={{fontSize:8,color:"#444",fontFamily:"monospace",letterSpacing:1}}>TOTAL</div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── GPS Error Banner ── */}
+      {posError && (
+        <div style={{background:"#1a0a0a",borderBottom:"1px solid #cc2222",padding:"8px 24px",fontSize:12,color:"#cc6666",fontFamily:"monospace",display:"flex",alignItems:"center",gap:10}}>
+          ⚠ {posError}
+          <button onClick={()=>setPosError(null)} style={{background:"none",border:"none",color:"#555",cursor:"pointer",marginLeft:"auto",fontSize:12}}>✕</button>
+        </div>
+      )}
+
+      {/* ── CHECK-IN TAB ── */}
+      {activeTab === "checkin" && (
+        <div style={{display:"flex",height:"calc(100vh - 160px)"}}>
+
+          {/* Sidebar filters */}
+          <div style={{width:280,background:"#0d0d0d",borderRight:"1px solid #1a1a1a",display:"flex",flexDirection:"column",flexShrink:0}}>
+            <div style={{padding:"8px 12px",borderBottom:"1px solid #1a1a1a",display:"flex",gap:8,alignItems:"center"}}>
+              <input placeholder="Search company..." value={search} onChange={e=>setSearch(e.target.value)}
+                style={{flex:1,background:"#1a1a1a",border:"1px solid #282828",borderRadius:5,color:"#f5f5f5",padding:"6px 10px",fontSize:12,outline:"none"}}/>
+            </div>
+            <div style={{padding:"6px 12px",borderBottom:"1px solid #141414",display:"flex",gap:4,flexWrap:"wrap"}}>
+              <button onClick={()=>setActiveDay("All")} style={{padding:"3px 8px",borderRadius:4,border:`1px solid ${activeDay==="All"?"#e8e8e8":"#222"}`,background:"transparent",color:activeDay==="All"?"#fff":"#444",cursor:"pointer",fontSize:9,fontFamily:"monospace"}}>ALL</button>
+              {Object.entries(DAY_CONFIG).map(([day,dc])=>(
+                <button key={day} onClick={()=>setActiveDay(activeDay===day?"All":day)}
+                  style={{padding:"3px 8px",borderRadius:4,border:`1px solid ${activeDay===day?dc.color:dc.border}`,background:"transparent",color:activeDay===day?dc.color:dc.border,cursor:"pointer",fontSize:9,fontFamily:"monospace"}}>
+                  {dc.label}
+                </button>
+              ))}
+            </div>
+            <div style={{overflowY:"auto",flex:1}}>
+              {filteredCompanies.length === 0 ? (
+                <div style={{padding:20,fontSize:11,color:"#333",textAlign:"center",fontFamily:"monospace"}}>No companies found</div>
+              ) : (
+                filteredCompanies.map(c => {
+                  const dc = DAY_CONFIG[c.day] || DAY_CONFIG.Monday;
+                  const isChecking = checkingIn === c.id;
+                  const isSuccess  = successId === c.id;
+                  const doneToday  = checkedInToday(c.id);
+
+                  return (
+                    <div key={c.id} style={{padding:"10px 12px",borderBottom:"1px solid #141414",background:isSuccess?"#0a1a0f":doneToday?"#0d0d12":"transparent",transition:"background .3s"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <div style={{flex:1,overflow:"hidden"}}>
+                          <div style={{fontSize:12,fontWeight:600,color:isSuccess?"#4ae87a":doneToday?"#4a9eff":"#e8e8e8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                            {TYPE_ICONS[c.type]||"🏗"} {c.name}
+                          </div>
+                          <div style={{fontSize:10,color:"#555",marginTop:1}}>
+                            <span style={{color:dc.color,fontFamily:"monospace",fontSize:9}}>{dc.label}</span>
+                            {" · "}{c.town}
+                            {doneToday && <span style={{color:"#4a9eff",marginLeft:6,fontSize:9}}>✓ today</span>}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setCheckInFormTarget(c)}
+                          disabled={isChecking || locating}
+                          style={{
+                            padding:"7px 12px",
+                            background: isSuccess ? "#0a3a1a" : doneToday ? "#0d1a2e" : "#cc2222",
+                            border: `1px solid ${isSuccess?"#2a6a3a":doneToday?"#1a4a6a":"#cc2222"}`,
+                            borderRadius:6,
+                            color: isSuccess ? "#4ae87a" : doneToday ? "#4a9eff" : "#fff",
+                            cursor: isChecking ? "wait" : "pointer",
+                            fontSize:10,
+                            fontFamily:"monospace",
+                            fontWeight:700,
+                            letterSpacing:1,
+                            flexShrink:0,
+                            minWidth:70,
+                            textAlign:"center",
+                          }}>
+                          {isChecking ? "📡 GPS..." : isSuccess ? "✓ IN" : doneToday ? "↩ AGAIN" : "CHECK IN"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Today's check-ins panel */}
+          <div style={{flex:1,padding:"20px 24px",overflowY:"auto"}}>
+            <div style={{marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,letterSpacing:3,color:"#e8e8e8"}}>
+                TODAY'S VISITS
+              </div>
+              <div style={{fontSize:10,color:"#444",fontFamily:"monospace"}}>
+                {new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}
+              </div>
+            </div>
+
+            {/* GPS accuracy indicator */}
+            {currentPos && (
+              <div style={{marginBottom:16,padding:"8px 14px",background:"#0a1a0f",border:"1px solid #1a4a2a",borderRadius:6,display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:16}}>📍</span>
+                <div>
+                  <div style={{fontSize:11,color:"#4ae87a",fontFamily:"monospace"}}>GPS ACTIVE · ±{Math.round(currentPos.accuracy||0)}m accuracy</div>
+                  <div style={{fontSize:9,color:"#555",fontFamily:"monospace"}}>{currentPos.lat.toFixed(5)}, {currentPos.lng.toFixed(5)}</div>
+                </div>
+              </div>
+            )}
+
+            {todayCheckIns.length === 0 ? (
+              <div style={{textAlign:"center",padding:"60px 20px",color:"#252525",fontFamily:"monospace",fontSize:12,lineHeight:2}}>
+                No check-ins yet today.<br/>
+                <span style={{color:"#1a1a1a"}}>Select a company from the list and tap CHECK IN.</span>
+              </div>
+            ) : (
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
+                {todayCheckIns.map(ci => {
+                  const ss = statusStyle(ci.status);
+                  return (
+                    <div key={ci.id} style={{background:"#0d0d0d",border:`1px solid ${ss.border}`,borderRadius:8,padding:"14px 16px"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                        <div style={{fontSize:9,padding:"2px 7px",borderRadius:3,background:ss.bg,border:`1px solid ${ss.border}`,color:ss.color,fontFamily:"monospace",letterSpacing:1}}>
+                          {ss.label}
+                        </div>
+                        <div style={{marginLeft:"auto",fontSize:10,color:"#555",fontFamily:"monospace"}}>{fmtTime(ci.checked_in_at)}</div>
+                      </div>
+                      <div style={{fontSize:14,fontWeight:600,color:"#e8e8e8",marginBottom:2}}>{ci.company_name}</div>
+                      <div style={{fontSize:11,color:"#555",marginBottom:6}}>{ci.company_town}</div>
+                      {ci.distance_ft !== null && ci.distance_ft !== undefined && (
+                        <div style={{fontSize:10,color:ci.distance_ft<=CHECK_IN_RADIUS_FT?"#4ae87a":"#e8873a",fontFamily:"monospace"}}>
+                          📍 {ci.distance_ft.toLocaleString()} ft from pin
+                          {ci.distance_ft > CHECK_IN_RADIUS_FT && <span style={{color:"#555"}}> (outside radius)</span>}
+                        </div>
+                      )}
+                      {ci.status === "no_coords" && (
+                        <div style={{fontSize:10,color:"#555",fontFamily:"monospace"}}>No pin coords on file</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── HISTORY TAB ── */}
+      {activeTab === "history" && (
+        <div style={{padding:"20px 24px"}}>
+
+          {/* Filters */}
+          <div style={{display:"flex",gap:10,marginBottom:16,alignItems:"center",flexWrap:"wrap"}}>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,letterSpacing:3,color:"#e8e8e8",marginRight:8}}>
+              {isManager ? "ALL REP CHECK-INS" : "MY HISTORY"}
+            </div>
+            {isManager && (
+              <select value={filterRep} onChange={e=>setFilterRep(e.target.value)}
+                style={{background:"#111",border:"1px solid #222",borderRadius:5,color:"#888",fontSize:11,padding:"6px 10px",fontFamily:"monospace",outline:"none"}}>
+                {repList.map(r=><option key={r} value={r}>{r}</option>)}
+              </select>
+            )}
+            <input type="date" value={filterDate} onChange={e=>setFilterDate(e.target.value)}
+              style={{background:"#111",border:"1px solid #222",borderRadius:5,color:"#888",fontSize:11,padding:"6px 10px",fontFamily:"monospace",outline:"none"}}/>
+            {filterDate && <button onClick={()=>setFilterDate("")} style={{background:"none",border:"1px solid #222",borderRadius:4,color:"#555",cursor:"pointer",fontSize:10,padding:"5px 8px"}}>Clear</button>}
+            <span style={{marginLeft:"auto",fontSize:10,color:"#444",fontFamily:"monospace"}}>{filteredHistory.length} check-ins</span>
+          </div>
+
+          {/* Stats row for managers */}
+          {isManager && (
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:10,marginBottom:20}}>
+              {repList.filter(r=>r!=="All").map(rep => {
+                const repCIs = allCheckIns.filter(ci => ci.rep_name === rep);
+                const todayCIs = repCIs.filter(ci => ci.checked_in_at?.startsWith(todayStr));
+                const verified = repCIs.filter(ci => ci.status === "verified").length;
+                return (
+                  <div key={rep} style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:8,padding:"12px 14px"}}>
+                    <div style={{fontSize:11,fontWeight:600,color:"#e8e8e8",marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{rep}</div>
+                    <div style={{display:"flex",gap:8}}>
+                      <div style={{textAlign:"center"}}>
+                        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:"#4ae87a",lineHeight:1}}>{todayCIs.length}</div>
+                        <div style={{fontSize:7,color:"#444",fontFamily:"monospace"}}>TODAY</div>
+                      </div>
+                      <div style={{textAlign:"center"}}>
+                        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:"#4a9eff",lineHeight:1}}>{repCIs.length}</div>
+                        <div style={{fontSize:7,color:"#444",fontFamily:"monospace"}}>TOTAL</div>
+                      </div>
+                      <div style={{textAlign:"center"}}>
+                        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:"#4ae87a",lineHeight:1}}>{repCIs.length>0?Math.round(verified/repCIs.length*100):0}%</div>
+                        <div style={{fontSize:7,color:"#444",fontFamily:"monospace"}}>VERIFIED</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Check-in history table */}
+          {filteredHistory.length === 0 ? (
+            <div style={{textAlign:"center",padding:60,color:"#252525",fontFamily:"monospace",fontSize:12}}>No check-ins found.</div>
+          ) : (
+            <div style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:8,overflow:"hidden"}}>
+              <div style={{display:"grid",gridTemplateColumns:isManager?"2fr 1.2fr 1fr 1fr 1fr":"2fr 1fr 1fr 1fr",gap:0,padding:"8px 16px",borderBottom:"1px solid #1a1a1a"}}>
+                {(isManager ? ["COMPANY","REP","DATE / TIME","DISTANCE","STATUS"] : ["COMPANY","DATE / TIME","DISTANCE","STATUS"]).map(h=>(
+                  <div key={h} style={{fontSize:9,color:"#444",fontFamily:"monospace",letterSpacing:1}}>{h}</div>
+                ))}
+              </div>
+              {filteredHistory.map((ci, i) => {
+                const ss = statusStyle(ci.status);
+                return (
+                  <div key={ci.id||i} style={{display:"grid",gridTemplateColumns:isManager?"2fr 1.2fr 1fr 1fr 1fr":"2fr 1fr 1fr 1fr",gap:0,padding:"10px 16px",borderBottom:"1px solid #111",background:i%2===0?"transparent":"#080808"}}>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:600,color:"#e8e8e8"}}>{ci.company_name}</div>
+                      <div style={{fontSize:10,color:"#555"}}>{ci.company_town}</div>
+                    </div>
+                    {isManager && <div style={{fontSize:11,color:"#888",alignSelf:"center"}}>{ci.rep_name}</div>}
+                    <div style={{alignSelf:"center"}}>
+                      <div style={{fontSize:11,color:"#666"}}>{fmtDateShort(ci.checked_in_at)}</div>
+                      <div style={{fontSize:10,color:"#444",fontFamily:"monospace"}}>{fmtTime(ci.checked_in_at)}</div>
+                    </div>
+                    <div style={{alignSelf:"center",fontSize:11,color:ci.distance_ft<=CHECK_IN_RADIUS_FT?"#4ae87a":ci.distance_ft>CHECK_IN_RADIUS_FT?"#e8873a":"#555",fontFamily:"monospace"}}>
+                      {ci.distance_ft !== null && ci.distance_ft !== undefined ? `${ci.distance_ft.toLocaleString()} ft` : "—"}
+                    </div>
+                    <div style={{alignSelf:"center"}}>
+                      <span style={{fontSize:9,padding:"2px 7px",borderRadius:3,background:ss.bg,border:`1px solid ${ss.border}`,color:ss.color,fontFamily:"monospace",letterSpacing:0.5}}>
+                        {ss.label}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    {checkInFormTarget && (
+      <CheckInFormModal
+        company={checkInFormTarget}
+        position={currentPos}
+        onClose={() => setCheckInFormTarget(null)}
+        onSubmit={async (company, pos, formData) => {
+          // Get position if not already available
+          let position = pos;
+          if (!position) {
+            try { position = await getPosition(); setCurrentPos(position); } catch(e) { setPosError(e.message); return; }
+          }
+          setCheckingIn(company.id);
+          const dist = company.lat && company.lng ? distanceFeet(position.lat, position.lng, company.lat, company.lng) : null;
+          const verified = dist !== null ? dist <= CHECK_IN_RADIUS_FT : false;
+          const status = dist === null ? "no_coords" : verified ? "verified" : "out_of_range";
+
+          const uid = getUserId();
+          const token = JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY;
+          let repName = "Rep", repEmail = "";
+          try {
+            const payload = JSON.parse(atob(token.split(".")[1]));
+            repEmail = payload.email || "";
+            repName = payload.user_metadata?.full_name || repEmail.split("@")[0] || "Rep";
+          } catch {}
+
+          const body = {
+            user_id: uid, rep_name: repName, rep_email: repEmail,
+            company_id: company.id, company_name: company.name, company_town: company.town,
+            company_lat: company.lat||null, company_lng: company.lng||null,
+            rep_lat: position.lat, rep_lng: position.lng,
+            gps_accuracy_m: Math.round(position.accuracy||0),
+            distance_ft: dist ? Math.round(dist) : null,
+            status, checked_in_at: new Date().toISOString(),
+            notes: formData.notes || "",
+            form_data: JSON.stringify(formData),
+          };
+
+          try {
+            if (navigator.onLine) {
+              await fetch(`${SUPABASE_URL}/rest/v1/check_ins`, {
+                method:"POST",
+                headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`,"Content-Type":"application/json","Prefer":"return=minimal"},
+                body: JSON.stringify(body),
+              });
+            } else {
+              queueOfflineAction(uid, { table: "check_ins", method: "POST", body });
+            }
+            setSuccessId(company.id);
+            setTimeout(() => setSuccessId(null), 3000);
+            await loadCheckIns();
+          } catch(e) {
+            queueOfflineAction(uid, { table: "check_ins", method: "POST", body });
+          }
+          setCheckingIn(null);
+        }}
+      />
+    )}
+    </div>
+  );
+}
+
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  PIPELINE DASHBOARD  (Visual summary for Bid Intelligence)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function PipelineDashboard({ bids }) {
+  const active = bids.filter(b => !["Won","Lost"].includes(b.status));
+  const awarded = bids.filter(b => b.status === "Awarded — Contact Now");
+  const closing = bids.filter(b => {
+    const d = b.bidDate ? Math.ceil((new Date(b.bidDate) - new Date()) / 86400000) : null;
+    return d !== null && d >= 0 && d <= 7 && !["Won","Lost","Awarded — Contact Now"].includes(b.status);
+  });
+  const won = bids.filter(b => b.status === "Won");
+  const total = bids.filter(b => ["Won","Lost"].includes(b.status)).length;
+  const winRate = total > 0 ? Math.round(won.length / total * 100) : 0;
+
+  const byCounty = {};
+  active.forEach(b => {
+    const k = b.county || "Other";
+    if (!byCounty[k]) byCounty[k] = { count: 0, value: 0 };
+    byCounty[k].count++;
+    byCounty[k].value += b.value || 0;
+  });
+
+  const byType = {};
+  active.forEach(b => {
+    const k = b.type || "Other";
+    if (!byType[k]) byType[k] = 0;
+    byType[k]++;
+  });
+
+  const fmt$ = v => v >= 1000000 ? `$${(v/1000000).toFixed(1)}M` : v >= 1000 ? `$${(v/1000).toFixed(0)}K` : `$${v}`;
+  const totalPipeline = active.reduce((s,b) => s + (b.value||0), 0);
+  const maxCountyVal = Math.max(...Object.values(byCounty).map(v => v.value), 1);
+  const maxTypeCount = Math.max(...Object.values(byType), 1);
+
+  const COUNTY_COLORS = {
+    "Litchfield": "#4a9eff", "Berkshire": "#e8c84a", "Hampden": "#b04ae8",
+    "Hartford": "#4ae8a0", "New Haven": "#e8873a", "Fairfield": "#e84a6a",
+  };
+  const TYPE_COLORS = {
+    "Commercial": "#4a9eff", "Municipal": "#4ae8a0", "Residential": "#e8873a",
+    "Industrial": "#b04ae8", "Other": "#888",
+  };
+
+  return (
+    <div style={{padding:"20px 32px 0",background:"#0a0a0a"}}>
+      {/* Stat cards row */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10,marginBottom:20}}>
+        {[
+          ["PIPELINE","total pipeline",fmt$(totalPipeline),"#e8e8e8"],
+          ["ACTIVE BIDS","open projects",active.length,"#4a9eff"],
+          ["🏆 AWARDED","contact now",awarded.length,awarded.length>0?"#ffaa00":"#555"],
+          ["CLOSING SOON","≤7 days",closing.length,closing.length>0?"#e8e8e8":"#555"],
+          ["WIN RATE","closed deals",`${winRate}%`,winRate>50?"#4ae87a":"#888"],
+          ["WON","total won",won.length,"#4ae87a"],
+        ].map(([label,sub,val,color]) => (
+          <div key={label} style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:8,padding:"12px 14px"}}>
+            <div style={{fontSize:8,color:"#444",fontFamily:"monospace",letterSpacing:2,marginBottom:4}}>{label}</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:24,color,lineHeight:1,marginBottom:2}}>{val}</div>
+            <div style={{fontSize:9,color:"#333",fontFamily:"monospace"}}>{sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Charts row */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+
+        {/* Pipeline by County */}
+        <div style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:8,padding:"16px 18px"}}>
+          <div style={{fontSize:10,color:"#444",fontFamily:"monospace",letterSpacing:2,marginBottom:14}}>PIPELINE BY COUNTY</div>
+          {Object.entries(byCounty).sort((a,b)=>b[1].value-a[1].value).slice(0,6).map(([county,data]) => {
+            const pct = Math.round(data.value / maxCountyVal * 100);
+            const color = COUNTY_COLORS[county] || "#888";
+            return (
+              <div key={county} style={{marginBottom:10}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                  <span style={{fontSize:11,color:"#e8e8e8"}}>{county}</span>
+                  <span style={{fontSize:10,color:"#555",fontFamily:"monospace"}}>{fmt$(data.value)} · {data.count}</span>
+                </div>
+                <div style={{height:6,background:"#1a1a1a",borderRadius:3,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${pct}%`,background:color,borderRadius:3,transition:"width .3s"}}/>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Pipeline by Type */}
+        <div style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:8,padding:"16px 18px"}}>
+          <div style={{fontSize:10,color:"#444",fontFamily:"monospace",letterSpacing:2,marginBottom:14}}>BIDS BY PROJECT TYPE</div>
+          {Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([type,count]) => {
+            const pct = Math.round(count / maxTypeCount * 100);
+            const color = TYPE_COLORS[type] || "#888";
+            return (
+              <div key={type} style={{marginBottom:10}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                  <span style={{fontSize:11,color:"#e8e8e8"}}>{type}</span>
+                  <span style={{fontSize:10,color:"#555",fontFamily:"monospace"}}>{count} bids</span>
+                </div>
+                <div style={{height:6,background:"#1a1a1a",borderRadius:3,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${pct}%`,background:color,borderRadius:3,transition:"width .3s"}}/>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  DAILY REPORT GENERATOR
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function DailyReportModal({ onClose }) {
+  const [checkIns, setCheckIns] = useState([]);
+  const [notes, setNotes]       = useState("");
+  const [loading, setLoading]   = useState(true);
+  const [copied, setCopied]     = useState(false);
+  const [saving, setSaving]     = useState(false);
+
+  const token = JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY;
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  useEffect(() => {
+    fetch(`${SUPABASE_URL}/rest/v1/check_ins?user_id=eq.${getUserId()}&checked_in_at=gte.${todayStr}T00:00:00Z&order=checked_in_at.asc`, {
+      headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`}
+    })
+    .then(r => r.json())
+    .then(d => { setCheckIns(Array.isArray(d) ? d : []); setLoading(false); })
+    .catch(() => setLoading(false));
+  }, []);
+
+  let repName = "Rep", repEmail = "";
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    repEmail = payload.email || "";
+    repName = payload.user_metadata?.full_name || repEmail.split("@")[0] || "Rep";
+  } catch {}
+
+  const fmtTime = iso => { try { return new Date(iso).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",hour12:true}); } catch { return ""; }};
+  const today = new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});
+
+  const reportText = `DAILY FIELD REPORT — ${today.toUpperCase()}
+Rep: ${repName}
+─────────────────────────────────────────
+
+SITE VISITS (${checkIns.length})
+${checkIns.length === 0 ? "No check-ins logged today." : checkIns.map((ci,i) =>
+  `${i+1}. ${ci.company_name} — ${ci.company_town}
+   Time: ${fmtTime(ci.checked_in_at)} | GPS: ${ci.status === "verified" ? "✓ Verified" : ci.status === "out_of_range" ? "⚠ Far from site" : "Logged"}${ci.distance_ft ? ` (${ci.distance_ft.toLocaleString()} ft from pin)` : ""}`
+).join("
+")}
+
+NOTES
+${notes.trim() || "No additional notes."}
+
+─────────────────────────────────────────
+Submitted via RepRoute Field Sales Intelligence`;
+
+  const copy = () => {
+    navigator.clipboard.writeText(reportText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    });
+  };
+
+  const saveAndShare = async () => {
+    setSaving(true);
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/daily_reports`, {
+        method: "POST",
+        headers: {"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=minimal"},
+        body: JSON.stringify({
+          user_id: getUserId(),
+          rep_name: repName,
+          rep_email: repEmail,
+          report_date: todayStr,
+          stops: checkIns.map(ci => ({ title: ci.company_name, description: ci.notes || "", time: fmtTime(ci.checked_in_at) })),
+          notes: notes.trim(),
+        })
+      });
+      copy();
+      setTimeout(onClose, 1500);
+    } catch(e) { alert("Save failed: " + e.message); }
+    setSaving(false);
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{background:"#0d0d0d",border:"1px solid #222",borderRadius:12,width:"100%",maxWidth:600,maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{padding:"20px 24px",borderBottom:"1px solid #1a1a1a",display:"flex",alignItems:"center",gap:12}}>
+          <div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,letterSpacing:3,color:"#e8e8e8"}}>DAILY REPORT</div>
+            <div style={{fontSize:10,color:"#444",fontFamily:"monospace"}}>{today}</div>
+          </div>
+          <button onClick={onClose} style={{marginLeft:"auto",background:"none",border:"none",color:"#555",fontSize:22,cursor:"pointer"}}>×</button>
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
+          {loading ? (
+            <div style={{color:"#444",fontFamily:"monospace",textAlign:"center",padding:20}}>Loading check-ins...</div>
+          ) : (
+            <>
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:10,color:"#cc2222",fontFamily:"monospace",letterSpacing:2,marginBottom:8}}>SITE VISITS TODAY — {checkIns.length}</div>
+                {checkIns.length === 0 ? (
+                  <div style={{fontSize:11,color:"#333",fontFamily:"monospace",padding:"12px 0"}}>No check-ins logged. Use the Check-In tab to log visits.</div>
+                ) : checkIns.map((ci,i) => (
+                  <div key={ci.id||i} style={{display:"flex",gap:10,padding:"8px 0",borderBottom:"1px solid #111"}}>
+                    <div style={{width:20,height:20,borderRadius:"50%",background:"#cc2222",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>
+                      <span style={{fontSize:9,color:"#fff",fontWeight:700}}>{i+1}</span>
+                    </div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:12,fontWeight:600,color:"#e8e8e8"}}>{ci.company_name}</div>
+                      <div style={{fontSize:10,color:"#555"}}>{ci.company_town} · {fmtTime(ci.checked_in_at)} · {ci.status==="verified"?"✓ GPS Verified":ci.status==="out_of_range"?"⚠ Far from site":"Logged"}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:10,color:"#444",fontFamily:"monospace",letterSpacing:2,marginBottom:8}}>ADDITIONAL NOTES</div>
+                <textarea
+                  value={notes}
+                  onChange={e=>setNotes(e.target.value)}
+                  placeholder="Prospects contacted, follow-ups needed, equipment opportunities spotted..."
+                  rows={4}
+                  style={{width:"100%",background:"#111",border:"1px solid #222",borderRadius:6,color:"#e8e8e8",padding:"10px 12px",fontSize:12,outline:"none",resize:"vertical",boxSizing:"border-box",fontFamily:"'DM Sans',sans-serif"}}
+                />
+              </div>
+
+              <div style={{background:"#080808",border:"1px solid #1a1a1a",borderRadius:6,padding:"14px 16px",fontFamily:"monospace",fontSize:11,color:"#555",whiteSpace:"pre-wrap",lineHeight:1.7,maxHeight:180,overflowY:"auto"}}>
+                {reportText}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div style={{padding:"16px 24px",borderTop:"1px solid #1a1a1a",display:"flex",gap:10}}>
+          <button onClick={copy}
+            style={{flex:1,padding:"10px",background:copied?"#0a1a0f":"#1a1a1a",border:`1px solid ${copied?"#2a6a3a":"#333"}`,borderRadius:6,color:copied?"#4ae87a":"#888",cursor:"pointer",fontSize:12,fontFamily:"monospace",letterSpacing:1}}>
+            {copied ? "✓ COPIED" : "📋 COPY"}
+          </button>
+          <button onClick={saveAndShare} disabled={saving}
+            style={{flex:2,padding:"10px",background:"#cc2222",border:"none",borderRadius:6,color:"#fff",cursor:saving?"wait":"pointer",fontSize:12,fontWeight:700,letterSpacing:1}}>
+            {saving ? "SAVING..." : "💾 SAVE & COPY TO SEND"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  PROSPECT SCORE ENGINE  (Heat-ranked call list)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function scoreCompany(company, checkIns, bids) {
+  let score = 0;
+  // Priority
+  if (company.priority === "High")   score += 40;
+  if (company.priority === "Medium") score += 20;
+  // Has phone
+  if (company.phone) score += 10;
+  // Has coordinates (pinned)
+  if (company.lat && company.lng) score += 5;
+  // Recent check-in (decay)
+  const myCheckIns = checkIns.filter(ci => ci.company_id === company.id);
+  if (myCheckIns.length === 0) score += 25; // never visited — urgent
+  else {
+    const lastVisit = new Date(myCheckIns.sort((a,b) => new Date(b.checked_in_at) - new Date(a.checked_in_at))[0].checked_in_at);
+    const daysSince = Math.floor((new Date() - lastVisit) / 86400000);
+    if (daysSince > 30) score += 20;
+    else if (daysSince > 14) score += 10;
+    else if (daysSince > 7) score += 5;
+    else score -= 10; // visited recently
+  }
+  // Active bids in same town
+  const townBids = bids.filter(b => b.town === company.town && !["Won","Lost"].includes(b.status));
+  score += Math.min(townBids.length * 3, 15);
+  return Math.max(0, Math.min(100, score));
+}
+
+function ProspectScorePanel({ companies, checkIns, bids, onSelectCompany }) {
+  const scored = companies
+    .map(c => ({ ...c, score: scoreCompany(c, checkIns, bids) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 15);
+
+  const getColor = score => score >= 70 ? "#cc2222" : score >= 50 ? "#e8873a" : score >= 30 ? "#e8c84a" : "#555";
+  const getLabel = score => score >= 70 ? "🔥 HOT" : score >= 50 ? "⚡ WARM" : score >= 30 ? "· COOL" : "— COLD";
+
+  return (
+    <div style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:8,overflow:"hidden"}}>
+      <div style={{padding:"12px 16px",borderBottom:"1px solid #1a1a1a",display:"flex",alignItems:"center",gap:10}}>
+        <div style={{fontSize:10,color:"#444",fontFamily:"monospace",letterSpacing:2}}>🎯 TOP PROSPECTS TODAY</div>
+        <div style={{marginLeft:"auto",fontSize:9,color:"#333",fontFamily:"monospace"}}>scored by priority · visits · local bids</div>
+      </div>
+      {scored.map((c, i) => {
+        const color = getColor(c.score);
+        const label = getLabel(c.score);
+        const dc = DAY_CONFIG[c.day] || DAY_CONFIG.Monday;
+        return (
+          <div key={c.id} onClick={() => onSelectCompany && onSelectCompany(c)}
+            style={{padding:"9px 16px",borderBottom:"1px solid #111",display:"flex",alignItems:"center",gap:10,cursor:"pointer",background:"transparent"}}
+            onMouseEnter={e=>e.currentTarget.style.background="#111"}
+            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            <div style={{width:22,textAlign:"center",fontSize:10,color:"#333",fontFamily:"monospace",flexShrink:0}}>{i+1}</div>
+            <div style={{width:36,height:6,background:"#1a1a1a",borderRadius:3,overflow:"hidden",flexShrink:0}}>
+              <div style={{height:"100%",width:`${c.score}%`,background:color,borderRadius:3}}/>
+            </div>
+            <div style={{flex:1,overflow:"hidden"}}>
+              <div style={{fontSize:12,fontWeight:600,color:"#e8e8e8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
+              <div style={{fontSize:9,color:"#555",fontFamily:"monospace"}}><span style={{color:dc.color}}>{dc.label}</span> · {c.town}</div>
+            </div>
+            <div style={{fontSize:9,color:color,fontFamily:"monospace",fontWeight:700,flexShrink:0}}>{label}</div>
+            {c.phone && <a href={`tel:${c.phone}`} onClick={e=>e.stopPropagation()} style={{fontSize:10,color:"#e8e8e8",background:"#1a1a1a",border:"1px solid #333",borderRadius:4,padding:"3px 8px",textDecoration:"none",flexShrink:0}}>📞</a>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  ONBOARDING WIZARD  (First-time setup)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function OnboardingWizard({ onComplete }) {
+  const [step, setStep]         = useState(0);
+  const [name, setName]         = useState("");
+  const [territory, setTerritory] = useState("");
+  const [role, setRole]         = useState("rep");
+  const [routes, setRoutes]     = useState({ Monday:"", Tuesday:"", Wednesday:"", Thursday:"", Friday:"" });
+  const [saving, setSaving]     = useState(false);
+
+  const token = JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY;
+
+  // Pre-fill name from Google token
+  useEffect(() => {
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      const gname = payload.user_metadata?.full_name || payload.email?.split("@")[0] || "";
+      setName(gname);
+    } catch {}
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    const uid = getUserId();
+    const settings = [
+      { key: "onboarded",  value: "true" },
+      { key: "rep_name",   value: name.trim() },
+      { key: "territory",  value: territory.trim() },
+      { key: "role",       value: role },
+      { key: "routes",     value: JSON.stringify(routes) },
+    ];
+    try {
+      for (const s of settings) {
+        await fetch(`${SUPABASE_URL}/rest/v1/user_settings`, {
+          method: "POST",
+          headers: {"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=minimal"},
+          body: JSON.stringify({ user_id: uid, key: s.key, value: s.value }),
+        });
+      }
+      DAY_CONFIG = getDAYCONFIG(routes);
+      onComplete({ name, territory, role, routes });
+    } catch(e) { alert("Setup failed: " + e.message); }
+    setSaving(false);
+  };
+
+  const STEPS = ["Welcome", "Your Info", "Route Days", "Done"];
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"#0a0a0a",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans',sans-serif"}}>
+      <div style={{width:"100%",maxWidth:480,padding:"40px 36px",background:"#0d0d0d",border:"1px solid #1e1e1e",borderRadius:16}}>
+        {/* Progress */}
+        <div style={{display:"flex",gap:6,marginBottom:32}}>
+          {STEPS.map((s,i) => (
+            <div key={s} style={{flex:1,height:3,borderRadius:2,background:i<=step?"#cc2222":"#1a1a1a",transition:"background .3s"}}/>
+          ))}
+        </div>
+
+        {step === 0 && (
+          <>
+            <div style={{fontSize:11,color:"#cc2222",fontFamily:"monospace",letterSpacing:3,marginBottom:12}}>WELCOME TO</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:48,color:"#e8e8e8",letterSpacing:4,lineHeight:1,marginBottom:8}}>
+              REP<span style={{color:"#cc2222"}}>ROUTE</span>
+            </div>
+            <div style={{fontSize:13,color:"#555",marginBottom:32,lineHeight:1.7}}>
+              Field sales intelligence for reps on the road.<br/>
+              Let's get you set up in 60 seconds.
+            </div>
+            <button onClick={()=>setStep(1)} style={{width:"100%",padding:"14px",background:"#cc2222",border:"none",borderRadius:8,color:"#fff",fontSize:14,fontWeight:700,cursor:"pointer",letterSpacing:1}}>
+              GET STARTED →
+            </button>
+          </>
+        )}
+
+        {step === 1 && (
+          <>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:3,color:"#e8e8e8",marginBottom:6}}>YOUR INFO</div>
+            <div style={{fontSize:11,color:"#444",fontFamily:"monospace",marginBottom:24}}>Tell us about yourself</div>
+
+            <label style={{fontSize:10,color:"#666",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:6}}>YOUR NAME</label>
+            <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Thomas Provitz"
+              style={{width:"100%",background:"#111",border:"1px solid #333",borderRadius:6,color:"#e8e8e8",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:16}}/>
+
+            <label style={{fontSize:10,color:"#666",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:6}}>TERRITORY / REGION</label>
+            <input value={territory} onChange={e=>setTerritory(e.target.value)} placeholder="e.g. Western CT + Berkshires MA"
+              style={{width:"100%",background:"#111",border:"1px solid #333",borderRadius:6,color:"#e8e8e8",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:16}}/>
+
+            <label style={{fontSize:10,color:"#666",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:8}}>YOUR ROLE</label>
+            <div style={{display:"flex",gap:8,marginBottom:28}}>
+              {[["rep","Field Rep"],["manager","Manager"]].map(([val,label]) => (
+                <button key={val} onClick={()=>setRole(val)}
+                  style={{flex:1,padding:"10px",background:role===val?"#1a0a0a":"#111",border:`1px solid ${role===val?"#cc2222":"#222"}`,borderRadius:6,color:role===val?"#cc2222":"#555",cursor:"pointer",fontSize:12,fontWeight:600}}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setStep(0)} style={{flex:1,padding:"12px",background:"none",border:"1px solid #222",borderRadius:6,color:"#555",cursor:"pointer",fontSize:12}}>Back</button>
+              <button onClick={()=>setStep(2)} disabled={!name.trim()}
+                style={{flex:2,padding:"12px",background:name.trim()?"#cc2222":"#222",border:"none",borderRadius:6,color:name.trim()?"#fff":"#444",cursor:name.trim()?"pointer":"default",fontSize:12,fontWeight:700}}>
+                Next →
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 2 && (
+          <>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,letterSpacing:3,color:"#e8e8e8",marginBottom:6}}>ROUTE DAYS</div>
+            <div style={{fontSize:11,color:"#444",fontFamily:"monospace",marginBottom:20}}>Name each day's route (or skip to use defaults)</div>
+
+            {Object.entries(DEFAULT_DAY_CONFIG).map(([day,dc]) => (
+              <div key={day} style={{marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:36,height:36,borderRadius:6,background:dc.bg,border:`1px solid ${dc.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <span style={{fontFamily:"monospace",fontSize:9,fontWeight:700,color:dc.color,letterSpacing:1}}>{dc.label}</span>
+                </div>
+                <input value={routes[day]} onChange={e=>setRoutes(r=>({...r,[day]:e.target.value}))}
+                  placeholder={dc.desc}
+                  style={{flex:1,background:"#111",border:`1px solid ${dc.border}`,borderRadius:5,color:"#e8e8e8",padding:"8px 10px",fontSize:12,outline:"none",fontFamily:"'DM Sans',sans-serif"}}/>
+              </div>
+            ))}
+
+            <div style={{display:"flex",gap:10,marginTop:20}}>
+              <button onClick={()=>setStep(1)} style={{flex:1,padding:"12px",background:"none",border:"1px solid #222",borderRadius:6,color:"#555",cursor:"pointer",fontSize:12}}>Back</button>
+              <button onClick={()=>setStep(3)} style={{flex:2,padding:"12px",background:"#cc2222",border:"none",borderRadius:6,color:"#fff",cursor:"pointer",fontSize:12,fontWeight:700}}>Next →</button>
+            </div>
+          </>
+        )}
+
+        {step === 3 && (
+          <>
+            <div style={{textAlign:"center",marginBottom:28}}>
+              <div style={{fontSize:48,marginBottom:12}}>🎯</div>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:30,letterSpacing:3,color:"#e8e8e8",marginBottom:8}}>YOU'RE ALL SET</div>
+              <div style={{fontSize:12,color:"#555",lineHeight:1.8}}>
+                Welcome, {name}.<br/>
+                Your territory: {territory || "Not set"}<br/>
+                Role: {role === "manager" ? "Manager" : "Field Rep"}
+              </div>
+            </div>
+            <button onClick={save} disabled={saving}
+              style={{width:"100%",padding:"14px",background:"#cc2222",border:"none",borderRadius:8,color:"#fff",fontSize:14,fontWeight:700,cursor:saving?"wait":"pointer",letterSpacing:1}}>
+              {saving ? "SETTING UP..." : "LAUNCH REPROUTE →"}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  OFFLINE CACHE  (Service worker + localStorage fallback)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const OFFLINE_KEYS = {
+  companies: uid => `offline_companies_${uid}`,
+  bids:      uid => `offline_bids_${uid}`,
+  checkIns:  uid => `offline_checkins_${uid}`,
+  pending:   uid => `offline_pending_${uid}`,
+};
+
+function saveOffline(key, data) {
+  try { localStorage.setItem(key, JSON.stringify(data)); } catch(e) { console.warn("Offline save failed:", e); }
+}
+
+function loadOffline(key) {
+  try { const d = localStorage.getItem(key); return d ? JSON.parse(d) : null; } catch { return null; }
+}
+
+function queueOfflineAction(uid, action) {
+  const key = OFFLINE_KEYS.pending(uid);
+  const pending = loadOffline(key) || [];
+  pending.push({ ...action, queuedAt: new Date().toISOString() });
+  saveOffline(key, pending);
+}
+
+async function flushOfflineQueue(uid, token) {
+  const key = OFFLINE_KEYS.pending(uid);
+  const pending = loadOffline(key) || [];
+  if (!pending.length) return 0;
+  let flushed = 0;
+  const remaining = [];
+  for (const action of pending) {
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/${action.table}`, {
+        method: action.method || "POST",
+        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+        body: JSON.stringify(action.body),
+      });
+      flushed++;
+    } catch { remaining.push(action); }
+  }
+  saveOffline(key, remaining);
+  return flushed;
+}
+
+function useOnlineStatus() {
+  const [online, setOnline] = useState(navigator.onLine);
+  useEffect(() => {
+    const on  = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+  }, []);
+  return online;
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  FOLLOW-UP REMINDERS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function FollowUpModal({ company, onClose, onSave }) {
+  const [date, setDate] = useState("");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const today = new Date();
+  const presets = [
+    { label: "Tomorrow",  days: 1 },
+    { label: "3 Days",    days: 3 },
+    { label: "1 Week",    days: 7 },
+    { label: "2 Weeks",   days: 14 },
+    { label: "1 Month",   days: 30 },
+  ];
+
+  const setPreset = (days) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + days);
+    setDate(d.toISOString().split("T")[0]);
+  };
+
+  const save = async () => {
+    if (!date) return;
+    setSaving(true);
+    const token = JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY;
+    const uid = getUserId();
+    try {
+      await fetch(`${SUPABASE_URL}/rest/v1/user_settings`, {
+        method: "POST",
+        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify({
+          user_id: uid,
+          key: `followup_${company.id}`,
+          value: JSON.stringify({ companyId: company.id, companyName: company.name, town: company.town, date, note, createdAt: new Date().toISOString() })
+        })
+      });
+      onSave && onSave({ companyId: company.id, companyName: company.name, town: company.town, date, note });
+      onClose();
+    } catch(e) { alert("Failed: " + e.message); }
+    setSaving(false);
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:800,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{background:"#0d0d0d",border:"1px solid #cc2222",borderRadius:12,width:"100%",maxWidth:400,padding:28}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,letterSpacing:3,color:"#e8e8e8",marginBottom:4}}>SET FOLLOW-UP</div>
+        <div style={{fontSize:11,color:"#555",fontFamily:"monospace",marginBottom:20}}>{company.name} · {company.town}</div>
+
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
+          {presets.map(p => (
+            <button key={p.label} onClick={() => setPreset(p.days)}
+              style={{padding:"6px 12px",background:"#111",border:"1px solid #222",borderRadius:5,color:"#888",cursor:"pointer",fontSize:11,fontFamily:"monospace"}}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        <label style={{fontSize:10,color:"#555",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:6}}>DATE</label>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)}
+          style={{width:"100%",background:"#111",border:"1px solid #333",borderRadius:5,color:"#e8e8e8",padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:14}}/>
+
+        <label style={{fontSize:10,color:"#555",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:6}}>NOTE (optional)</label>
+        <input value={note} onChange={e => setNote(e.target.value)} placeholder="e.g. Follow up on T3 quote"
+          style={{width:"100%",background:"#111",border:"1px solid #333",borderRadius:5,color:"#e8e8e8",padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:20}}/>
+
+        <div style={{display:"flex",gap:10}}>
+          <button onClick={onClose} style={{flex:1,padding:"10px",background:"none",border:"1px solid #222",borderRadius:6,color:"#555",cursor:"pointer",fontSize:12}}>Cancel</button>
+          <button onClick={save} disabled={!date||saving}
+            style={{flex:2,padding:"10px",background:date?"#cc2222":"#222",border:"none",borderRadius:6,color:date?"#fff":"#444",cursor:date?"pointer":"default",fontSize:12,fontWeight:700}}>
+            {saving ? "Saving..." : "Set Reminder"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  MILEAGE TRACKER
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function MileageTracker() {
+  const [routes, setRoutes]   = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const token = JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY;
+
+  useEffect(() => {
+    const uid = getUserId();
+    fetch(`${SUPABASE_URL}/rest/v1/user_settings?user_id=eq.${uid}&key=like.route_%&order=created_at.desc&limit=100`, {
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}` }
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (Array.isArray(d)) {
+        setRoutes(d.map(r => { try { return { key: r.key, ...JSON.parse(r.value) }; } catch { return null; } }).filter(Boolean));
+      }
+      setLoading(false);
+    })
+    .catch(() => setLoading(false));
+  }, []);
+
+  // Calculate distance between two lat/lng points in miles
+  function distanceMiles(lat1, lng1, lat2, lng2) {
+    const R = 3958.8;
+    const dLat = (lat2-lat1)*Math.PI/180;
+    const dLng = (lng2-lng1)*Math.PI/180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function routeMiles(stops) {
+    if (!stops || stops.length < 2) return 0;
+    let total = 0;
+    for (let i = 0; i < stops.length-1; i++) {
+      if (stops[i].lat && stops[i].lng && stops[i+1].lat && stops[i+1].lng) {
+        total += distanceMiles(stops[i].lat, stops[i].lng, stops[i+1].lat, stops[i+1].lng);
+      }
+    }
+    return total;
+  }
+
+  // Get week bounds
+  function weekBounds(offset) {
+    const today = new Date();
+    const day = today.getDay();
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - (day===0?6:day-1) + offset*7);
+    monday.setHours(0,0,0,0);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate()+6);
+    sunday.setHours(23,59,59,999);
+    return { start: monday, end: sunday };
+  }
+
+  const { start, end } = weekBounds(weekOffset);
+  const IRS_RATE = 0.67; // 2024 IRS standard mileage rate
+
+  const weekRoutes = routes.filter(r => {
+    const d = new Date(r.date || r.createdAt || 0);
+    return d >= start && d <= end;
+  });
+
+  const totalMiles = weekRoutes.reduce((s, r) => s + routeMiles(r.stops || []), 0);
+  const totalReimbursement = totalMiles * IRS_RATE;
+
+  const fmtDate = d => new Date(d).toLocaleDateString("en-US", {month:"short",day:"numeric"});
+
+  if (loading) return <div style={{padding:40,color:"#444",fontFamily:"monospace",textAlign:"center"}}>Loading...</div>;
+
+  return (
+    <div style={{background:"#0a0a0a",color:"#f5f5f5",fontFamily:"'DM Sans',sans-serif",minHeight:"calc(100vh - 54px)"}}>
+      {/* Header */}
+      <div style={{background:"#0d0d0d",borderBottom:"1px solid #1a1a1a",padding:"10px 24px",display:"flex",alignItems:"center",gap:16}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,letterSpacing:3,color:"#e8e8e8"}}>MILEAGE TRACKER</div>
+        <div style={{fontSize:10,color:"#444",fontFamily:"monospace",letterSpacing:2}}>IRS RATE ${IRS_RATE}/MILE</div>
+        <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
+          <button onClick={()=>setWeekOffset(w=>w-1)} style={{padding:"5px 10px",background:"transparent",border:"1px solid #222",borderRadius:5,color:"#555",cursor:"pointer",fontSize:13}}>‹</button>
+          <span style={{fontSize:11,color:"#555",fontFamily:"monospace",minWidth:180,textAlign:"center"}}>
+            {fmtDate(start)} – {fmtDate(end)}
+          </span>
+          <button onClick={()=>setWeekOffset(w=>w+1)} style={{padding:"5px 10px",background:"transparent",border:"1px solid #222",borderRadius:5,color:"#555",cursor:"pointer",fontSize:13}}>›</button>
+          <button onClick={()=>setWeekOffset(0)} style={{padding:"5px 12px",background:"#111",border:"1px solid #222",borderRadius:5,color:"#888",cursor:"pointer",fontSize:11,fontFamily:"monospace"}}>THIS WEEK</button>
+        </div>
+      </div>
+
+      <div style={{padding:"20px 24px"}}>
+        {/* Summary cards */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
+          {[
+            ["MILES THIS WEEK", totalMiles.toFixed(1) + " mi", "#4a9eff"],
+            ["REIMBURSEMENT", "$" + totalReimbursement.toFixed(2), "#4ae87a"],
+            ["ROUTES RUN", weekRoutes.length, "#e8e8e8"],
+            ["AVG PER ROUTE", weekRoutes.length > 0 ? (totalMiles/weekRoutes.length).toFixed(1)+" mi" : "—", "#888"],
+          ].map(([label, val, color]) => (
+            <div key={label} style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:8,padding:"14px 16px"}}>
+              <div style={{fontSize:8,color:"#444",fontFamily:"monospace",letterSpacing:2,marginBottom:4}}>{label}</div>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,color,lineHeight:1}}>{val}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Route breakdown */}
+        {weekRoutes.length === 0 ? (
+          <div style={{textAlign:"center",padding:40,color:"#252525",fontFamily:"monospace",fontSize:12}}>
+            No routes saved this week.<br/>Use Route Planner to plan and save routes.
+          </div>
+        ) : (
+          <div style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:8,overflow:"hidden"}}>
+            <div style={{padding:"10px 16px",borderBottom:"1px solid #1a1a1a",display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",gap:0}}>
+              {["ROUTE NAME","DATE","STOPS","MILES"].map(h => (
+                <div key={h} style={{fontSize:9,color:"#444",fontFamily:"monospace",letterSpacing:1}}>{h}</div>
+              ))}
+            </div>
+            {weekRoutes.map((r, i) => {
+              const miles = routeMiles(r.stops || []);
+              return (
+                <div key={r.key||i} style={{padding:"12px 16px",borderBottom:"1px solid #111",display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",gap:0,background:i%2===0?"transparent":"#080808"}}>
+                  <div style={{fontSize:12,fontWeight:600,color:"#e8e8e8"}}>{r.name}</div>
+                  <div style={{fontSize:11,color:"#666"}}>{r.date || "—"}</div>
+                  <div style={{fontSize:11,color:"#888",fontFamily:"monospace"}}>{(r.stops||[]).length}</div>
+                  <div style={{fontSize:11,color:"#4a9eff",fontFamily:"monospace"}}>{miles.toFixed(1)} mi</div>
+                </div>
+              );
+            })}
+            <div style={{padding:"12px 16px",background:"#0f0f0f",display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",gap:0,borderTop:"1px solid #222"}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#e8e8e8",fontFamily:"monospace",letterSpacing:1}}>TOTAL</div>
+              <div/>
+              <div style={{fontSize:11,color:"#888",fontFamily:"monospace"}}>{weekRoutes.reduce((s,r)=>s+(r.stops||[]).length,0)}</div>
+              <div style={{fontSize:13,color:"#4ae87a",fontFamily:"monospace",fontWeight:700}}>{totalMiles.toFixed(1)} mi · ${totalReimbursement.toFixed(2)}</div>
+            </div>
+          </div>
+        )}
+
+        {/* Export button */}
+        <div style={{marginTop:16,display:"flex",gap:10}}>
+          <button onClick={() => {
+            const csv = ["Route Name,Date,Stops,Miles,Reimbursement",
+              ...weekRoutes.map(r => {
+                const m = routeMiles(r.stops||[]);
+                return `"${r.name}","${r.date||""}","${(r.stops||[]).length}","${m.toFixed(1)}","$${(m*IRS_RATE).toFixed(2)}"`;
+              }),
+              `"TOTAL","","${weekRoutes.reduce((s,r)=>s+(r.stops||[]).length,0)}","${totalMiles.toFixed(1)}","$${totalReimbursement.toFixed(2)}"`,
+            ].join("
+");
+            const blob = new Blob([csv], {type:"text/csv"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url; a.download = `mileage_${start.toISOString().split("T")[0]}.csv`; a.click();
+          }} style={{padding:"10px 20px",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:"#888",cursor:"pointer",fontSize:12,fontFamily:"monospace",letterSpacing:1}}>
+            ⬇ EXPORT CSV
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  CUSTOM CHECK-IN FORM FIELDS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const CHECKIN_FIELDS = [
+  { key: "contacted_dm",    label: "Contacted Decision Maker?", type: "bool" },
+  { key: "left_materials",  label: "Left Materials?",           type: "bool" },
+  { key: "quoted",          label: "Quoted Equipment?",         type: "bool" },
+  { key: "quote_value",     label: "Quote Value ($)",           type: "number" },
+  { key: "next_step",       label: "Next Step",                 type: "select", options: ["Follow up call","Schedule demo","Send proposal","Check back in 30 days","Not interested","Won"] },
+  { key: "notes",           label: "Visit Notes",               type: "text" },
+];
+
+function CheckInFormModal({ company, position, onClose, onSubmit }) {
+  const [form, setForm] = useState({ contacted_dm: false, left_materials: false, quoted: false, quote_value: "", next_step: "Follow up call", notes: "" });
+  const [submitting, setSubmitting] = useState(false);
+  const set = (k, v) => setForm(f => ({...f, [k]: v}));
+
+  const submit = async () => {
+    setSubmitting(true);
+    await onSubmit(company, position, form);
+    setSubmitting(false);
+    onClose();
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:900,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{background:"#0d0d0d",border:"1px solid #cc2222",borderRadius:12,width:"100%",maxWidth:440,maxHeight:"90vh",overflowY:"auto",padding:28}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,letterSpacing:3,color:"#e8e8e8",marginBottom:4}}>LOG VISIT</div>
+        <div style={{fontSize:11,color:"#555",fontFamily:"monospace",marginBottom:20}}>{company.name} · {company.town}</div>
+
+        {CHECKIN_FIELDS.map(field => (
+          <div key={field.key} style={{marginBottom:14}}>
+            <label style={{fontSize:10,color:"#666",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:5}}>{field.label.toUpperCase()}</label>
+            {field.type === "bool" && (
+              <div style={{display:"flex",gap:8}}>
+                {["Yes","No"].map(opt => (
+                  <button key={opt} onClick={() => set(field.key, opt==="Yes")}
+                    style={{flex:1,padding:"8px",background:(form[field.key]&&opt==="Yes")||(!form[field.key]&&opt==="No")?"#1a0a0a":"#111",border:`1px solid ${(form[field.key]&&opt==="Yes")||(!form[field.key]&&opt==="No")?"#cc2222":"#222"}`,borderRadius:5,color:(form[field.key]&&opt==="Yes")||(!form[field.key]&&opt==="No")?"#cc2222":"#555",cursor:"pointer",fontSize:12,fontWeight:600}}>
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            )}
+            {field.type === "number" && (
+              <input type="number" value={form[field.key]} onChange={e=>set(field.key,e.target.value)} placeholder="0"
+                style={{width:"100%",background:"#111",border:"1px solid #222",borderRadius:5,color:"#e8e8e8",padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+            )}
+            {field.type === "select" && (
+              <select value={form[field.key]} onChange={e=>set(field.key,e.target.value)}
+                style={{width:"100%",background:"#111",border:"1px solid #222",borderRadius:5,color:"#e8e8e8",padding:"8px 10px",fontSize:13,outline:"none"}}>
+                {field.options.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            )}
+            {field.type === "text" && (
+              <textarea value={form[field.key]} onChange={e=>set(field.key,e.target.value)} rows={3} placeholder="What happened on this visit..."
+                style={{width:"100%",background:"#111",border:"1px solid #222",borderRadius:5,color:"#e8e8e8",padding:"8px 10px",fontSize:12,outline:"none",resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
+            )}
+          </div>
+        ))}
+
+        <div style={{display:"flex",gap:10,marginTop:20}}>
+          <button onClick={onClose} style={{flex:1,padding:"10px",background:"none",border:"1px solid #222",borderRadius:6,color:"#555",cursor:"pointer",fontSize:12}}>Cancel</button>
+          <button onClick={submit} disabled={submitting}
+            style={{flex:2,padding:"10px",background:"#cc2222",border:"none",borderRadius:6,color:"#fff",cursor:submitting?"wait":"pointer",fontSize:12,fontWeight:700}}>
+            {submitting?"Logging...":"Log Visit"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  NEARBY PROSPECTS (Lead Generation on the Map)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function NearbyProspects({ onAddCompany, onClose }) {
+  const [results, setResults]   = useState([]);
+  const [loading, setLoading]   = useState(false);
+  const [pos, setPos]           = useState(null);
+  const [error, setError]       = useState(null);
+  const [radius, setRadius]     = useState(10); // miles
+  const [type, setType]         = useState("general_contractor");
+
+  const TYPES = [
+    { value: "general_contractor", label: "General Contractor" },
+    { value: "excavating_contractor", label: "Excavation" },
+    { value: "paving_contractor", label: "Paving" },
+    { value: "roofing_contractor", label: "Roofing" },
+    { value: "construction_company", label: "Construction" },
+    { value: "industrial_contractor", label: "Industrial" },
+  ];
+
+  const search = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const position = await new Promise((res, rej) =>
+        navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 10000 })
+      );
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      setPos({ lat, lng });
+
+      // Use Google Places nearby search via proxy-free approach
+      const radiusMeters = radius * 1609.34;
+      const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=${radiusMeters}&keyword=${encodeURIComponent(type.replace(/_/g," "))}&type=establishment&key=`;
+      // Since we don't have a Places API key, use OpenStreetMap Nominatim as free fallback
+      const osmUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(type.replace(/_/g," "))}&lat=${lat}&lon=${lng}&radius=${radius}&format=json&limit=20&addressdetails=1`;
+      const r = await fetch(osmUrl, { headers: { "Accept-Language": "en" } });
+      const data = await r.json();
+      setResults(data.slice(0, 15).map(p => ({
+        name: p.display_name.split(",")[0],
+        address: p.display_name,
+        lat: parseFloat(p.lat),
+        lng: parseFloat(p.lon),
+        town: p.address?.city || p.address?.town || p.address?.village || "",
+        state: p.address?.state_code || "CT",
+      })));
+    } catch(e) {
+      setError(e.message || "Search failed");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{background:"#0d0d0d",border:"1px solid #333",borderRadius:12,width:"100%",maxWidth:520,maxHeight:"85vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{padding:"20px 24px",borderBottom:"1px solid #1a1a1a",display:"flex",alignItems:"center"}}>
+          <div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,letterSpacing:3,color:"#e8e8e8"}}>FIND NEARBY PROSPECTS</div>
+            <div style={{fontSize:10,color:"#444",fontFamily:"monospace",letterSpacing:1}}>GPS-BASED LEAD GENERATION</div>
+          </div>
+          <button onClick={onClose} style={{marginLeft:"auto",background:"none",border:"none",color:"#555",fontSize:22,cursor:"pointer"}}>×</button>
+        </div>
+
+        <div style={{padding:"16px 24px",borderBottom:"1px solid #1a1a1a",display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+          <select value={type} onChange={e=>setType(e.target.value)}
+            style={{background:"#111",border:"1px solid #222",borderRadius:5,color:"#e8e8e8",padding:"7px 10px",fontSize:12,outline:"none",flex:1}}>
+            {TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+          <select value={radius} onChange={e=>setRadius(Number(e.target.value))}
+            style={{background:"#111",border:"1px solid #222",borderRadius:5,color:"#888",padding:"7px 10px",fontSize:12,outline:"none",width:100}}>
+            {[5,10,20,50].map(r => <option key={r} value={r}>{r} mi</option>)}
+          </select>
+          <button onClick={search} disabled={loading}
+            style={{padding:"7px 16px",background:"#cc2222",border:"none",borderRadius:5,color:"#fff",cursor:loading?"wait":"pointer",fontSize:12,fontWeight:700,whiteSpace:"nowrap"}}>
+            {loading ? "Searching..." : "📍 Search Near Me"}
+          </button>
+        </div>
+
+        {error && <div style={{padding:"10px 24px",color:"#cc6666",fontSize:11,fontFamily:"monospace"}}>{error}</div>}
+
+        <div style={{overflowY:"auto",flex:1}}>
+          {results.length === 0 && !loading && (
+            <div style={{padding:32,textAlign:"center",color:"#333",fontFamily:"monospace",fontSize:11,lineHeight:2}}>
+              Click "Search Near Me" to find<br/>construction companies in your area.
+            </div>
+          )}
+          {results.map((r, i) => (
+            <div key={i} style={{padding:"12px 24px",borderBottom:"1px solid #111",display:"flex",alignItems:"center",gap:12}}>
+              <div style={{flex:1,overflow:"hidden"}}>
+                <div style={{fontSize:12,fontWeight:600,color:"#e8e8e8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}</div>
+                <div style={{fontSize:10,color:"#555",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.address}</div>
+              </div>
+              <button onClick={() => { onAddCompany(r); }}
+                style={{padding:"6px 12px",background:"#1a0a0a",border:"1px solid #cc2222",borderRadius:5,color:"#cc2222",cursor:"pointer",fontSize:11,fontFamily:"monospace",fontWeight:700,flexShrink:0}}>
+                + ADD
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  REP LEADERBOARD  (Manager view)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function RepLeaderboard() {
+  const [data, setData]     = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState("week"); // week | month | all
+  const token = JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY;
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/check_ins?order=checked_in_at.desc&limit=1000`, {
+        headers: {"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`}
+      }).then(r=>r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/daily_reports?order=report_date.desc&limit=500`, {
+        headers: {"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`}
+      }).then(r=>r.json()),
+    ]).then(([checkIns, reports]) => {
+      // Group by rep
+      const reps = {};
+      (Array.isArray(checkIns)?checkIns:[]).forEach(ci => {
+        if (!reps[ci.rep_name]) reps[ci.rep_name] = { name: ci.rep_name, checkIns: [], reports: [] };
+        reps[ci.rep_name].checkIns.push(ci);
+      });
+      (Array.isArray(reports)?reports:[]).forEach(r => {
+        if (!reps[r.rep_name]) reps[r.rep_name] = { name: r.rep_name, checkIns: [], reports: [] };
+        reps[r.rep_name].reports.push(r);
+      });
+
+      const now = new Date();
+      const weekAgo = new Date(now - 7*86400000);
+      const monthAgo = new Date(now - 30*86400000);
+      const cutoff = period === "week" ? weekAgo : period === "month" ? monthAgo : new Date(0);
+
+      setData(Object.values(reps).map(rep => {
+        const periodCIs = rep.checkIns.filter(ci => new Date(ci.checked_in_at) >= cutoff);
+        const verified = periodCIs.filter(ci => ci.status === "verified").length;
+        const todayCIs = rep.checkIns.filter(ci => ci.checked_in_at?.startsWith(new Date().toISOString().split("T")[0]));
+        const totalReports = rep.reports.filter(r => new Date(r.report_date) >= cutoff).length;
+        const score = periodCIs.length * 10 + verified * 5 + totalReports * 3;
+        return { ...rep, periodCIs: periodCIs.length, verified, todayCIs: todayCIs.length, reports: totalReports, score };
+      }).sort((a,b) => b.score - a.score));
+
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [period]);
+
+  const medals = ["🥇","🥈","🥉"];
+
+  if (loading) return <div style={{padding:40,color:"#444",fontFamily:"monospace",textAlign:"center"}}>Loading leaderboard...</div>;
+
+  return (
+    <div style={{background:"#0a0a0a",color:"#f5f5f5",fontFamily:"'DM Sans',sans-serif",minHeight:"calc(100vh-54px)"}}>
+      <div style={{background:"#0d0d0d",borderBottom:"1px solid #1a1a1a",padding:"10px 24px",display:"flex",alignItems:"center",gap:16}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,letterSpacing:3,color:"#e8e8e8"}}>REP LEADERBOARD</div>
+        <div style={{marginLeft:"auto",display:"flex",gap:6}}>
+          {[["week","7 DAYS"],["month","30 DAYS"],["all","ALL TIME"]].map(([val,label]) => (
+            <button key={val} onClick={()=>setPeriod(val)}
+              style={{padding:"5px 12px",background:period===val?"#1a0a0a":"transparent",border:`1px solid ${period===val?"#cc2222":"#222"}`,borderRadius:5,color:period===val?"#cc2222":"#444",cursor:"pointer",fontSize:10,fontFamily:"monospace"}}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{padding:"20px 24px"}}>
+        {data.length === 0 ? (
+          <div style={{textAlign:"center",padding:60,color:"#252525",fontFamily:"monospace",fontSize:12}}>No rep data yet.</div>
+        ) : (
+          <div style={{display:"grid",gap:10,maxWidth:700,margin:"0 auto"}}>
+            {data.map((rep, i) => (
+              <div key={rep.name} style={{background:"#0d0d0d",border:`1px solid ${i===0?"#cc2222":i===1?"#555":i===2?"#6b4400":"#1a1a1a"}`,borderRadius:10,padding:"16px 20px",display:"flex",alignItems:"center",gap:16}}>
+                <div style={{fontSize:28,width:40,textAlign:"center",flexShrink:0}}>{medals[i] || `${i+1}`}</div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:15,fontWeight:700,color:"#e8e8e8",marginBottom:4}}>{rep.name}</div>
+                  <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+                    {[
+                      [rep.todayCIs, "today"],
+                      [rep.periodCIs, "check-ins"],
+                      [rep.verified, "verified"],
+                      [rep.reports, "reports"],
+                    ].map(([val, label]) => (
+                      <div key={label} style={{textAlign:"center"}}>
+                        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:i===0?"#cc2222":"#e8e8e8",lineHeight:1}}>{val}</div>
+                        <div style={{fontSize:8,color:"#444",fontFamily:"monospace",letterSpacing:1}}>{label.toUpperCase()}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{textAlign:"right",flexShrink:0}}>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,color:i===0?"#cc2222":i===1?"#aaa":i===2?"#cd7f32":"#555",lineHeight:1}}>{rep.score}</div>
+                  <div style={{fontSize:8,color:"#444",fontFamily:"monospace",letterSpacing:1}}>SCORE</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  DIGITAL PROPOSAL BUILDER
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const EQUIPMENT_LIST = [
+  "Excavator (Mini)",
+  "Excavator (Mid)",
+  "Excavator (Large)",
+  "Skid Steer",
+  "Track Loader",
+  "Wheel Loader",
+  "Dozer",
+  "Motor Grader",
+  "Compactor (Plate)",
+  "Compactor (Roller)",
+  "Boom Lift",
+  "Scissor Lift",
+  "Telehandler",
+  "Dump Truck",
+  "Light Tower",
+  "Generator",
+  "Air Compressor",
+  "Concrete Mixer",
+  "Trencher",
+  "Other",
+];
+
+function ProposalBuilder({ onClose }) {
+  const [company, setCompany]   = useState("");
+  const [contact, setContact]   = useState("");
+  const [email, setEmail]       = useState("");
+  const [items, setItems]       = useState([{ equipment: "Excavator (Mini)", qty: 1, duration: "1 week", rate: "" }]);
+  const [notes, setNotes]       = useState("");
+  const [sending, setSending]   = useState(false);
+  const [preview, setPreview]   = useState(false);
+
+  let repName = "";
+  try {
+    const token = JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY;
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    repName = payload.user_metadata?.full_name || payload.email?.split("@")[0] || "Rep";
+  } catch {}
+
+  const addItem = () => setItems(prev => [...prev, { equipment: "Skid Steer", qty: 1, duration: "1 week", rate: "" }]);
+  const updateItem = (i, k, v) => setItems(prev => prev.map((item, j) => j===i ? {...item,[k]:v} : item));
+  const removeItem = (i) => setItems(prev => prev.filter((_,j)=>j!==i));
+
+  const totalValue = items.reduce((s,item) => s + (parseFloat(item.rate)||0) * (parseInt(item.qty)||1), 0);
+
+  const proposalText = `EQUIPMENT RENTAL PROPOSAL
+${"─".repeat(50)}
+Date: ${new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}
+Prepared by: ${repName} — EquipmentShare
+
+TO:
+${company}
+${contact}
+
+PROPOSED EQUIPMENT
+${"─".repeat(50)}
+${items.map((item,i) => `${i+1}. ${item.equipment}
+   Qty: ${item.qty} | Duration: ${item.duration} | Rate: ${item.rate?`$${item.rate}/day`:"TBD"}
+`).join("")}
+${"─".repeat(50)}
+ESTIMATED TOTAL: ${totalValue > 0 ? `$${totalValue.toLocaleString()}` : "TBD"}
+
+NOTES:
+${notes || "N/A"}
+
+${"─".repeat(50)}
+This proposal is for discussion purposes only.
+Contact ${repName} to finalize terms.
+EquipmentShare | T3 Technology Platform`;
+
+  const sendEmail = () => {
+    const subject = encodeURIComponent(`Equipment Rental Proposal — EquipmentShare`);
+    const body = encodeURIComponent(proposalText);
+    window.open(`mailto:${email}?subject=${subject}&body=${body}`);
+    setSending(false);
+  };
+
+  const copyProposal = () => {
+    navigator.clipboard.writeText(proposalText);
+    alert("Proposal copied to clipboard!");
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{background:"#0d0d0d",border:"1px solid #333",borderRadius:12,width:"100%",maxWidth:600,maxHeight:"95vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{padding:"16px 20px",borderBottom:"1px solid #1a1a1a",display:"flex",alignItems:"center"}}>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,letterSpacing:3,color:"#e8e8e8"}}>
+            {preview ? "PROPOSAL PREVIEW" : "BUILD PROPOSAL"}
+          </div>
+          <button onClick={onClose} style={{marginLeft:"auto",background:"none",border:"none",color:"#555",fontSize:22,cursor:"pointer"}}>×</button>
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"16px 20px"}}>
+          {preview ? (
+            <pre style={{fontFamily:"monospace",fontSize:11,color:"#888",lineHeight:1.8,whiteSpace:"pre-wrap"}}>{proposalText}</pre>
+          ) : (
+            <>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+                {[["Company Name","company",company,setCompany],["Contact Name","contact",contact,setContact]].map(([label,key,val,setter]) => (
+                  <div key={key}>
+                    <label style={{fontSize:9,color:"#555",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4}}>{label.toUpperCase()}</label>
+                    <input value={val} onChange={e=>setter(e.target.value)} placeholder={label}
+                      style={{width:"100%",background:"#111",border:"1px solid #222",borderRadius:5,color:"#e8e8e8",padding:"8px 10px",fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+                  </div>
+                ))}
+                <div style={{gridColumn:"1/-1"}}>
+                  <label style={{fontSize:9,color:"#555",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4}}>CONTACT EMAIL</label>
+                  <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="contact@company.com"
+                    style={{width:"100%",background:"#111",border:"1px solid #222",borderRadius:5,color:"#4a9eff",padding:"8px 10px",fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+                </div>
+              </div>
+
+              <div style={{fontSize:9,color:"#555",fontFamily:"monospace",letterSpacing:1,marginBottom:8}}>EQUIPMENT ITEMS</div>
+              {items.map((item, i) => (
+                <div key={i} style={{background:"#111",border:"1px solid #1a1a1a",borderRadius:6,padding:"10px 12px",marginBottom:8}}>
+                  <div style={{display:"grid",gridTemplateColumns:"2fr 60px 1fr 80px 24px",gap:8,alignItems:"center"}}>
+                    <select value={item.equipment} onChange={e=>updateItem(i,"equipment",e.target.value)}
+                      style={{background:"#0d0d0d",border:"1px solid #222",borderRadius:4,color:"#e8e8e8",padding:"6px 8px",fontSize:11,outline:"none"}}>
+                      {EQUIPMENT_LIST.map(eq => <option key={eq} value={eq}>{eq}</option>)}
+                    </select>
+                    <input type="number" value={item.qty} onChange={e=>updateItem(i,"qty",e.target.value)} min="1" placeholder="Qty"
+                      style={{background:"#0d0d0d",border:"1px solid #222",borderRadius:4,color:"#e8e8e8",padding:"6px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box"}}/>
+                    <select value={item.duration} onChange={e=>updateItem(i,"duration",e.target.value)}
+                      style={{background:"#0d0d0d",border:"1px solid #222",borderRadius:4,color:"#888",padding:"6px 8px",fontSize:11,outline:"none"}}>
+                      {["1 day","3 days","1 week","2 weeks","1 month","3 months","6 months"].map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                    <input type="number" value={item.rate} onChange={e=>updateItem(i,"rate",e.target.value)} placeholder="$/day"
+                      style={{background:"#0d0d0d",border:"1px solid #222",borderRadius:4,color:"#4ae87a",padding:"6px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box"}}/>
+                    <button onClick={()=>removeItem(i)} style={{background:"none",border:"none",color:"#553333",cursor:"pointer",fontSize:14,padding:0}}>✕</button>
+                  </div>
+                </div>
+              ))}
+              <button onClick={addItem} style={{width:"100%",padding:"8px",background:"transparent",border:"1px dashed #222",borderRadius:5,color:"#444",cursor:"pointer",fontSize:11,fontFamily:"monospace",marginBottom:14}}>
+                + ADD EQUIPMENT
+              </button>
+
+              {totalValue > 0 && (
+                <div style={{textAlign:"right",fontSize:13,color:"#4ae87a",fontFamily:"monospace",marginBottom:14,fontWeight:700}}>
+                  EST. TOTAL: ${totalValue.toLocaleString()}
+                </div>
+              )}
+
+              <div>
+                <label style={{fontSize:9,color:"#555",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:5}}>NOTES</label>
+                <textarea value={notes} onChange={e=>setNotes(e.target.value)} rows={3} placeholder="Special terms, delivery notes, T3 platform value props..."
+                  style={{width:"100%",background:"#111",border:"1px solid #222",borderRadius:5,color:"#888",padding:"8px 10px",fontSize:12,outline:"none",resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div style={{padding:"12px 20px",borderTop:"1px solid #1a1a1a",display:"flex",gap:8}}>
+          <button onClick={()=>setPreview(p=>!p)} style={{padding:"9px 14px",background:"#111",border:"1px solid #333",borderRadius:5,color:"#888",cursor:"pointer",fontSize:11,fontFamily:"monospace"}}>
+            {preview?"✎ EDIT":"👁 PREVIEW"}
+          </button>
+          <button onClick={copyProposal} style={{padding:"9px 14px",background:"#111",border:"1px solid #333",borderRadius:5,color:"#888",cursor:"pointer",fontSize:11,fontFamily:"monospace"}}>
+            📋 COPY
+          </button>
+          {email && (
+            <button onClick={sendEmail} style={{flex:1,padding:"9px",background:"#cc2222",border:"none",borderRadius:5,color:"#fff",cursor:"pointer",fontSize:12,fontWeight:700}}>
+              ✉ SEND TO {email.split("@")[0].toUpperCase()}
+            </button>
+          )}
+          {!email && (
+            <button disabled style={{flex:1,padding:"9px",background:"#1a1a1a",border:"none",borderRadius:5,color:"#333",fontSize:12}}>
+              ADD EMAIL TO SEND
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  WEATHER OVERLAY HELPER
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function WeatherWidget() {
+  const [weather, setWeather] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    navigator.geolocation?.getCurrentPosition(
+      async pos => {
+        try {
+          const { latitude: lat, longitude: lon } = pos.coords;
+          const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weathercode,windspeed_10m,precipitation&temperature_unit=fahrenheit&windspeed_unit=mph&forecast_days=1`);
+          const d = await r.json();
+          const code = d.current?.weathercode;
+          const desc = code <= 1 ? "Clear" : code <= 3 ? "Partly Cloudy" : code <= 9 ? "Cloudy" : code <= 29 ? "Drizzle" : code <= 39 ? "Fog" : code <= 49 ? "Freezing Drizzle" : code <= 59 ? "Rain" : code <= 69 ? "Snow" : code <= 79 ? "Snow" : code <= 99 ? "Thunderstorm" : "Unknown";
+          const icon = code <= 1 ? "☀️" : code <= 3 ? "⛅" : code <= 9 ? "☁️" : code <= 69 ? "🌧️" : code <= 79 ? "❄️" : code <= 99 ? "⛈️" : "🌡️";
+          setWeather({ temp: Math.round(d.current.temperature_2m), desc, icon, wind: Math.round(d.current.windspeed_10m), precip: d.current.precipitation });
+        } catch(e) { setError("Weather unavailable"); }
+        setLoading(false);
+      },
+      () => { setError("Location needed"); setLoading(false); },
+      { timeout: 8000 }
+    );
+  }, []);
+
+  if (loading) return <div style={{fontSize:10,color:"#333",fontFamily:"monospace"}}>⏳ WEATHER</div>;
+  if (error || !weather) return <div style={{fontSize:10,color:"#333",fontFamily:"monospace"}}>{error||"—"}</div>;
+
+  const fieldSafe = weather.precip < 0.1 && weather.wind < 25;
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:8,padding:"4px 12px",background:"#111",border:`1px solid ${fieldSafe?"#1a4a1a":"#4a2a1a"}`,borderRadius:20}}>
+      <span style={{fontSize:14}}>{weather.icon}</span>
+      <span style={{fontSize:11,color:"#e8e8e8",fontFamily:"monospace"}}>{weather.temp}°F</span>
+      <span style={{fontSize:9,color:fieldSafe?"#4ae87a":"#e8873a",fontFamily:"monospace",fontWeight:700}}>{fieldSafe?"✓ FIELD OK":"⚠ CHECK CONDITIONS"}</span>
+    </div>
+  );
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  AUTOPLAY FOLLOW-UP ENGINE  (Surfaces overdue prospects)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function AutoPlayPanel({ companies, checkIns, followUps }) {
+  const today = new Date();
+
+  // Overdue follow-ups
+  const overdue = followUps.filter(f => new Date(f.date) <= today);
+
+  // Companies not visited in 30+ days
+  const stale = companies.filter(c => {
+    const myCIs = checkIns.filter(ci => ci.company_id === c.id);
+    if (myCIs.length === 0) return true;
+    const last = new Date(myCIs.sort((a,b) => new Date(b.checked_in_at)-new Date(a.checked_in_at))[0].checked_in_at);
+    return Math.floor((today - last) / 86400000) >= 30;
+  }).filter(c => c.priority === "High").slice(0, 5);
+
+  if (overdue.length === 0 && stale.length === 0) return null;
+
+  return (
+    <div style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:8,overflow:"hidden",marginBottom:16}}>
+      <div style={{padding:"10px 16px",borderBottom:"1px solid #1a1a1a",display:"flex",alignItems:"center",gap:8}}>
+        <span style={{fontSize:14}}>⚡</span>
+        <div style={{fontSize:10,color:"#e8873a",fontFamily:"monospace",letterSpacing:2,fontWeight:700}}>ACTION REQUIRED</div>
+        <div style={{marginLeft:"auto",fontSize:9,color:"#444",fontFamily:"monospace"}}>{overdue.length + stale.length} items</div>
+      </div>
+      {overdue.map((f, i) => (
+        <div key={i} style={{padding:"10px 16px",borderBottom:"1px solid #111",display:"flex",gap:10,alignItems:"center"}}>
+          <span style={{fontSize:11}}>📅</span>
+          <div style={{flex:1}}>
+            <div style={{fontSize:12,fontWeight:600,color:"#e8e8e8"}}>{f.companyName}</div>
+            <div style={{fontSize:10,color:"#cc2222",fontFamily:"monospace"}}>Follow-up due {new Date(f.date).toLocaleDateString("en-US",{month:"short",day:"numeric"})}{f.note && ` · ${f.note}`}</div>
+          </div>
+        </div>
+      ))}
+      {stale.map((c, i) => {
+        const dc = DAY_CONFIG[c.day] || DAY_CONFIG.Monday;
+        return (
+          <div key={c.id} style={{padding:"10px 16px",borderBottom:"1px solid #111",display:"flex",gap:10,alignItems:"center"}}>
+            <span style={{fontSize:11}}>⏰</span>
+            <div style={{flex:1}}>
+              <div style={{fontSize:12,fontWeight:600,color:"#e8e8e8"}}>{c.name}</div>
+              <div style={{fontSize:10,color:"#555"}}><span style={{color:dc.color,fontFamily:"monospace"}}>{dc.label}</span> · {c.town} · Not visited in 30+ days</div>
+            </div>
+            {c.phone && <a href={`tel:${c.phone}`} style={{padding:"5px 10px",background:"#1a1a1a",border:"1px solid #333",borderRadius:4,color:"#e8e8e8",fontSize:10,textDecoration:"none"}}>📞</a>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState("bids");
   const [session, setSession] = useState(() => getSession());
   const [userRoutes, setUserRoutes] = useState({});
   const [editingRoutes, setEditingRoutes] = useState(false);
   const [routeDraft, setRouteDraft] = useState({});
+  const [onboarded, setOnboarded] = useState(null); // null=loading, false=show wizard, true=done
+  const [companies_app, setAppCompanies] = useState([]);
+  const [checkIns_app, setAppCheckIns] = useState([]);
+  const [bids_app, setAppBids] = useState([]);
+  const [followUps, setFollowUps]       = useState([]);
+  const [showProposal, setShowProposal] = useState(false);
+  const [showNearby, setShowNearby]     = useState(false);
+  const isOnline = useOnlineStatus();
 
   // Listen for auth state
   useEffect(() => {
     const s = getSession();
     setSession(s);
   }, []);
+
+  // Check onboarding status
+  useEffect(() => {
+    const uid = getUserId();
+    if (!uid) { setOnboarded(false); return; }
+    const token = JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY;
+    fetch(`${SUPABASE_URL}/rest/v1/user_settings?user_id=eq.${uid}&key=eq.onboarded&select=value`, {
+      headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`}
+    })
+    .then(r => r.json())
+    .then(d => setOnboarded(d?.[0]?.value === "true"))
+    .catch(() => setOnboarded(true)); // fail open
+  }, [session]);
+
+  // Load companies + check-ins for prospect score panel
+  useEffect(() => {
+    const uid = getUserId();
+    if (!uid) return;
+    const token = JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY;
+    // Companies
+    const cacheKey = `companies_${uid}`;
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) { try { setAppCompanies(JSON.parse(cached)); } catch {} }
+    fetch(`${SUPABASE_URL}/rest/v1/companies?select=*&user_id=eq.${uid}&order=id.asc&limit=1000`, {
+      headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`}
+    }).then(r => r.json()).then(d => { if (Array.isArray(d)) { setAppCompanies(d); localStorage.setItem(cacheKey, JSON.stringify(d)); } }).catch(() => {});
+    // Check-ins
+    fetch(`${SUPABASE_URL}/rest/v1/check_ins?user_id=eq.${uid}&order=checked_in_at.desc&limit=200`, {
+      headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`}
+    }).then(r => r.json()).then(d => { if (Array.isArray(d)) setAppCheckIns(d); }).catch(() => {});
+    // Bids
+    fetch(`${SUPABASE_URL}/rest/v1/projects?select=*&user_id=eq.${uid}&order=id.asc&limit=2000`, {
+      headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`}
+    }).then(r => r.json()).then(d => { if (Array.isArray(d)) setAppBids(d.map ? d.map(fromDB) : []); }).catch(() => {});
+    // Follow-ups
+    fetch(`${SUPABASE_URL}/rest/v1/user_settings?user_id=eq.${uid}&key=like.followup_%&select=value`, {
+      headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`}
+    }).then(r => r.json()).then(d => {
+      if (Array.isArray(d)) setFollowUps(d.map(s => { try { return JSON.parse(s.value); } catch { return null; } }).filter(Boolean));
+    }).catch(() => {});
+    // Flush any offline queued actions
+    if (navigator.onLine) flushOfflineQueue(uid, token).then(n => n > 0 && console.log(`Flushed ${n} offline actions`)).catch(() => {});
+  }, [session]);
 
   // Load user route names from Supabase
   useEffect(() => {
@@ -1540,18 +3919,54 @@ export default function App() {
     return <LoginScreen />;
   }
 
+  // Still checking onboarding status
+  if (onboarded === null) {
+    return (
+      <div style={{minHeight:"100vh",background:"#0a0a0a",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <div style={{color:"#333",fontFamily:"monospace",fontSize:12,letterSpacing:2}}>LOADING...</div>
+      </div>
+    );
+  }
+
+  // Show onboarding wizard for new users
+  if (onboarded === false) {
+    return <OnboardingWizard onComplete={({ name, territory, role, routes }) => {
+      DAY_CONFIG = getDAYCONFIG(routes);
+      setUserRoutes(routes);
+      setOnboarded(true);
+    }} />;
+  }
+
   const NAV_ITEMS = [
     { id: "bids", label: "BID INTELLIGENCE", icon: "📋" },
     { id: "map",  label: "TERRITORY MAP",    icon: "🗺" },
     { id: "log",  label: "ACTIVITY LOG",      icon: "📅" },
+    { id: "route", label: "ROUTE PLANNER",    icon: "🗺" },
+    { id: "checkin",   label: "CHECK-IN",        icon: "📍" },
+    { id: "mileage",   label: "MILEAGE",          icon: "🚗" },
+    { id: "leaderboard", label: "LEADERBOARD",    icon: "🏆" },
   ];
 
   return (
     <div style={{ minHeight:"100vh", background:"#0a0a0a", fontFamily:"'DM Sans','Segoe UI',sans-serif", color:"#f5f5f5" }}>
       <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+      <style>{`
+        * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+        body { overscroll-behavior: none; }
+        input, select, textarea, button { font-family: inherit; }
+        @media (max-width: 768px) {
+          .rr-nav { padding: 0 12px !important; height: 50px !important; overflow-x: auto; }
+          .rr-nav-logo { display: none !important; }
+          .rr-nav-right { gap: 6px !important; }
+          .rr-nav-right span { display: none !important; }
+          .rr-view { padding: 8px !important; }
+          .rr-hide-mobile { display: none !important; }
+          .rr-table-grid { grid-template-columns: 1fr 80px 70px 24px !important; }
+        }
+      `}</style>
 
       {/* ── Global Nav Bar ── */}
-      <div style={{
+      <div className="rr-nav" style={{
         background:"#0f0f0f",
         borderBottom:"1px solid #1e1e1e",
         padding:"0 32px",
@@ -1622,10 +4037,17 @@ export default function App() {
         </div>
 
         {/* Right side — sign out */}
-        <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:12 }}>
+        <div className="rr-nav-right" style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:8 }}>
+          {!isOnline && <div style={{padding:"3px 10px",background:"#1a0a0a",border:"1px solid #cc2222",borderRadius:10,fontSize:9,color:"#cc2222",fontFamily:"monospace",letterSpacing:1}}>● OFFLINE</div>}
+          <WeatherWidget />
+          <button onClick={()=>setShowNearby(true)} style={{padding:"5px 10px",background:"none",border:"1px solid #2a2a2a",borderRadius:5,color:"#555",cursor:"pointer",fontSize:10}}>📍 NEARBY</button>
+          <button onClick={()=>setShowProposal(true)} style={{padding:"5px 10px",background:"none",border:"1px solid #2a2a2a",borderRadius:5,color:"#555",cursor:"pointer",fontSize:10}}>📄 PROPOSAL</button>
           <span style={{ fontSize:9, color:"#333", fontFamily:"monospace", letterSpacing:1 }}>
-            REPROUTE v2
+            v2
           </span>
+          <button onClick={()=>setView("prospects")} style={{padding:"5px 12px",background:view==="prospects"?"#1a0a0a":"none",border:`1px solid ${view==="prospects"?"#cc2222":"#2a2a2a"}`,borderRadius:5,color:view==="prospects"?"#cc2222":"#555",cursor:"pointer",fontSize:11}}>
+            🎯 TOP PROSPECTS
+          </button>
           <button onClick={()=>{setRouteDraft({...userRoutes});setEditingRoutes(true);}} style={{padding:"5px 12px",background:"none",border:"1px solid #2a2a2a",borderRadius:5,color:"#555",cursor:"pointer",fontSize:11}}>
             ⚙ ROUTES
           </button>
@@ -1645,6 +4067,68 @@ export default function App() {
       <div style={{ display: view === "log" ? "block" : "none" }}>
         <ActivityLog />
       </div>
+      <div style={{ display: view === "route" ? "block" : "none" }}>
+        <RoutePlanner />
+      </div>
+      <div style={{ display: view === "checkin" ? "block" : "none" }}>
+        <CheckIn />
+      </div>
+      {view === "prospects" && (
+        <div style={{padding:"20px 32px",background:"#0a0a0a",minHeight:"calc(100vh - 54px)"}}>
+          <div style={{maxWidth:800,margin:"0 auto"}}>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:24,letterSpacing:3,color:"#e8e8e8",marginBottom:6}}>TOP PROSPECTS</div>
+            <div style={{fontSize:10,color:"#444",fontFamily:"monospace",letterSpacing:2,marginBottom:20}}>RANKED BY PRIORITY · VISIT HISTORY · LOCAL BIDS</div>
+            <AutoPlayPanel companies={companies_app} checkIns={checkIns_app} followUps={followUps}/>
+            <ProspectScorePanel
+              companies={companies_app}
+              checkIns={checkIns_app}
+              bids={bids_app}
+              onSelectCompany={c => { setView("map"); }}
+            />
+          </div>
+        </div>
+      )}
+      {view === "mileage" && <MileageTracker />}
+      {view === "leaderboard" && <RepLeaderboard />}
+
+      {/* ── Global modals (available from any view) ── */}
+      {showProposal && <ProposalBuilder onClose={()=>setShowProposal(false)} />}
+      {showNearby && (
+        <NearbyProspects
+          onClose={()=>setShowNearby(false)}
+          onAddCompany={c => {
+            setShowNearby(false);
+            setView("map");
+          }}
+        />
+      )}
+
+      {/* ── Route names modal ── */}
+      {editingRoutes && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div style={{background:"#0d0d0d",border:"1px solid #222",borderRadius:12,padding:32,width:420,fontFamily:"'DM Sans',sans-serif"}}>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,letterSpacing:3,color:"#e8e8e8",marginBottom:6}}>CUSTOMIZE ROUTES</div>
+            <div style={{fontSize:11,color:"#444",fontFamily:"monospace",letterSpacing:1,marginBottom:20}}>Name each day route for your territory</div>
+            {Object.entries(DEFAULT_DAY_CONFIG).map(([day, dc]) => (
+              <div key={day} style={{marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:36,height:36,borderRadius:6,background:dc.bg,border:`1px solid ${dc.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <span style={{fontFamily:"monospace",fontSize:9,fontWeight:700,color:dc.color,letterSpacing:1}}>{dc.label}</span>
+                </div>
+                <input
+                  value={routeDraft[day] ?? dc.desc}
+                  onChange={e => setRouteDraft(d => ({...d, [day]: e.target.value}))}
+                  placeholder={dc.desc}
+                  style={{flex:1,background:"#111",border:`1px solid ${dc.border}`,borderRadius:5,color:"#e8e8e8",padding:"8px 10px",fontSize:12,outline:"none",fontFamily:"'DM Sans',sans-serif"}}
+                />
+              </div>
+            ))}
+            <div style={{display:"flex",gap:10,marginTop:24,justifyContent:"flex-end"}}>
+              <button onClick={()=>setEditingRoutes(false)} style={{padding:"8px 16px",background:"none",border:"1px solid #333",borderRadius:6,color:"#555",cursor:"pointer",fontSize:12}}>Cancel</button>
+              <button onClick={()=>saveRoutes(routeDraft)} style={{padding:"8px 20px",background:"#cc2222",border:"none",borderRadius:6,color:"#fff",cursor:"pointer",fontSize:12,fontWeight:600}}>Save Routes</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
