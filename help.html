@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>RepRoute — Help Guide</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --red: #cc2222;
+      --red-dim: #1a0808;
+      --white: #f0f0f0;
+      --grey: #888;
+      --dim: #444;
+      --border: #1e1e1e;
+      --bg: #0a0a0a;
+      --card: #0d0d0d;
+      --card2: #111;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--white);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    /* ── Nav ── */
+    nav {
+      position: sticky; top:0; z-index:100;
+      background: rgba(10,10,10,0.95);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      padding: 0 32px;
+      height: 52px;
+      display: flex; align-items: center; gap: 24px;
+    }
+    .nav-brand {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22px; letter-spacing: 3px;
+      color: var(--white);
+    }
+    .nav-brand span { color: var(--red); }
+    nav a {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px; letter-spacing: 2px;
+      color: var(--dim); text-decoration: none;
+      transition: color .15s;
+    }
+    nav a:hover { color: var(--white); }
+    .nav-right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+    .badge {
+      padding: 3px 10px;
+      background: var(--red-dim);
+      border: 1px solid var(--red);
+      border-radius: 10px;
+      font-family: 'DM Mono', monospace;
+      font-size: 9px; letter-spacing: 1px;
+      color: var(--red);
+    }
+
+    /* ── Hero ── */
+    .hero {
+      padding: 72px 32px 48px;
+      max-width: 900px; margin: 0 auto;
+      text-align: center;
+    }
+    .hero-eyebrow {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px; letter-spacing: 4px;
+      color: var(--red); margin-bottom: 16px;
+    }
+    .hero h1 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(48px, 8vw, 80px);
+      letter-spacing: 4px; line-height: 1;
+      margin-bottom: 16px;
+    }
+    .hero h1 span { color: var(--red); }
+    .hero p {
+      font-size: 15px; color: var(--grey);
+      max-width: 520px; margin: 0 auto 40px;
+    }
+
+    /* ── Quick nav pills ── */
+    .quick-nav {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      justify-content: center;
+      padding: 0 32px 56px;
+      max-width: 900px; margin: 0 auto;
+    }
+    .quick-nav a {
+      padding: 6px 16px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px; letter-spacing: 1px;
+      color: var(--dim); text-decoration: none;
+      transition: all .15s;
+    }
+    .quick-nav a:hover {
+      border-color: var(--red);
+      color: var(--red);
+      background: var(--red-dim);
+    }
+
+    /* ── Section ── */
+    .section {
+      max-width: 900px; margin: 0 auto;
+      padding: 0 32px 64px;
+    }
+    .section-header {
+      display: flex; align-items: center; gap: 14px;
+      margin-bottom: 28px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section-icon {
+      width: 40px; height: 40px;
+      background: var(--red-dim);
+      border: 1px solid var(--red);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+    }
+    .section-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 26px; letter-spacing: 3px;
+      color: var(--white);
+    }
+    .section-sub {
+      font-family: 'DM Mono', monospace;
+      font-size: 10px; letter-spacing: 2px;
+      color: var(--dim); margin-top: 2px;
+    }
+    .section-num {
+      margin-left: auto;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 36px; color: #1a1a1a;
+    }
+
+    /* ── Cards ── */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+      transition: border-color .15s;
+    }
+    .card:hover { border-color: #333; }
+    .card-title {
+      font-size: 13px; font-weight: 600;
+      color: var(--white); margin-bottom: 6px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .card-title .icon { font-size: 15px; }
+    .card p {
+      font-size: 12px; color: var(--grey);
+      line-height: 1.6;
+    }
+    .card .tag {
+      display: inline-block;
+      margin-top: 10px;
+      padding: 2px 8px;
+      background: #111;
+      border: 1px solid #222;
+      border-radius: 3px;
+      font-family: 'DM Mono', monospace;
+      font-size: 9px; letter-spacing: 1px;
+      color: var(--dim);
+    }
+
+    /* ── Steps ── */
+    .steps { display: flex; flex-direction: column; gap: 10px; }
+    .step {
+      display: flex; gap: 16px; align-items: flex-start;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 8px; padding: 14px 18px;
+    }
+    .step-num {
+      width: 24px; height: 24px; flex-shrink: 0;
+      background: var(--red); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px; font-weight: 500;
+      color: #fff; margin-top: 1px;
+    }
+    .step-body strong {
+      display: block; font-size: 13px;
+      color: var(--white); margin-bottom: 3px;
+    }
+    .step-body p { font-size: 12px; color: var(--grey); }
+
+    /* ── Tips ── */
+    .tip {
+      background: #0d1a0d;
+      border: 1px solid #1a4a1a;
+      border-radius: 8px;
+      padding: 14px 18px;
+      font-size: 12px; color: #6a9a6a;
+      margin-top: 16px;
+      display: flex; gap: 10px; align-items: flex-start;
+    }
+    .tip-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+
+    .warn {
+      background: #1a0d00;
+      border: 1px solid #4a2a00;
+      border-radius: 8px;
+      padding: 14px 18px;
+      font-size: 12px; color: #aa6a2a;
+      margin-top: 12px;
+      display: flex; gap: 10px; align-items: flex-start;
+    }
+
+    /* ── Feature list ── */
+    .feature-list {
+      display: grid; gap: 8px;
+    }
+    .feature-row {
+      display: flex; gap: 12px; align-items: flex-start;
+      padding: 12px 16px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 7px;
+    }
+    .feature-row .fi { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+    .feature-row strong { font-size: 13px; color: var(--white); display: block; margin-bottom: 2px; }
+    .feature-row p { font-size: 12px; color: var(--grey); }
+
+    /* ── Divider ── */
+    .divider {
+      height: 1px; background: var(--border);
+      max-width: 900px; margin: 0 auto 64px;
+    }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px;
+      text-align: center;
+      font-family: 'DM Mono', monospace;
+      font-size: 10px; letter-spacing: 2px;
+      color: #2a2a2a;
+    }
+    footer span { color: var(--red); }
+
+    @media (max-width: 600px) {
+      nav { padding: 0 16px; }
+      .hero, .section, .quick-nav { padding-left: 16px; padding-right: 16px; }
+      .card-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav>
+  <div class="nav-brand">REP<span>ROUTE</span></div>
+  <a href="#getting-started">START</a>
+  <a href="#tabs">TABS</a>
+  <a href="#features">FEATURES</a>
+  <a href="#manager">MANAGERS</a>
+  <a href="#tips">TIPS</a>
+  <div class="nav-right">
+    <div class="badge">HELP GUIDE v1</div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div class="hero">
+  <div class="hero-eyebrow">FIELD SALES INTELLIGENCE</div>
+  <h1>REP<span>ROUTE</span><br>HELP GUIDE</h1>
+  <p>Everything you need to know to plan routes, track visits, log bids, and close more deals in the field.</p>
+</div>
+
+<!-- Quick nav -->
+<div class="quick-nav">
+  <a href="#getting-started">🚀 Getting Started</a>
+  <a href="#bids">📋 Bid Intelligence</a>
+  <a href="#map">🗺 Territory Map</a>
+  <a href="#checkin">📍 Check-In</a>
+  <a href="#route">🛣 Route Planner</a>
+  <a href="#activity">📅 Activity Log</a>
+  <a href="#mileage">🚗 Mileage</a>
+  <a href="#prospects">🎯 Top Prospects</a>
+  <a href="#proposal">📄 Proposals</a>
+  <a href="#manager">🏆 Managers</a>
+</div>
+
+<!-- ── GETTING STARTED ── -->
+<div class="section" id="getting-started">
+  <div class="section-header">
+    <div class="section-icon">🚀</div>
+    <div>
+      <div class="section-title">Getting Started</div>
+      <div class="section-sub">FIRST TIME SETUP</div>
+    </div>
+    <div class="section-num">01</div>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Sign in with Google</strong>
+        <p>Go to <strong>reproute.tech</strong> and tap "Sign in with Google." Use your work Gmail. Access is restricted to authorized team members only.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>Complete the Setup Wizard</strong>
+        <p>First-time users see a quick 4-step setup: enter your name, territory, role (Rep or Manager), and name your route days. Takes under 60 seconds.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>Add to Home Screen</strong>
+        <p>On iPhone: tap Share → Add to Home Screen. On Android: tap the browser menu → Add to Home Screen. RepRoute works like a native app — no App Store needed.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>Customize Your Routes</strong>
+        <p>Tap <strong>⚙ ROUTES</strong> in the top right to rename each day's route to match your territory — e.g. "Monday: Torrington Loop."</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="tip">
+    <div class="tip-icon">💡</div>
+    <div>RepRoute works offline. If you lose signal in the field, check-ins and actions are saved locally and sync automatically when you reconnect.</div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── BID INTELLIGENCE ── -->
+<div class="section" id="bids">
+  <div class="section-header">
+    <div class="section-icon">📋</div>
+    <div>
+      <div class="section-title">Bid Intelligence</div>
+      <div class="section-sub">TRACK CONSTRUCTION PROJECTS & BIDS</div>
+    </div>
+    <div class="section-num">02</div>
+  </div>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title"><span class="icon">🏆</span> Award Alerts</div>
+      <p>Projects with status "Awarded — Contact Now" are flagged in red at the top of the page. These are your hottest leads — the winning GC needs equipment now.</p>
+      <span class="tag">ACTION REQUIRED</span>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">⬆</span> Import Data</div>
+      <p>Upload a CSV from Dodge, eSEARCH, or any spreadsheet. Projects import in seconds and are tagged with an amber "IMPORTED" badge so you know the source.</p>
+      <span class="tag">CSV IMPORT</span>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">+ </span> Add Project</div>
+      <p>Manually add any project you hear about in the field. Fill in the GC, value, bid date, town, and priority. It saves instantly to your live database.</p>
+      <span class="tag">MANUAL ENTRY</span>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">📊</span> Pipeline Dashboard</div>
+      <p>Charts at the top show your pipeline value broken down by county and project type — so you always know where your biggest opportunities are.</p>
+      <span class="tag">ANALYTICS</span>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">📋</span> Daily Report</div>
+      <p>Tap "Daily Report" to auto-generate a formatted field report from today's check-ins. Add notes, then copy and send to your manager in one tap.</p>
+      <span class="tag">REPORTING</span>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon">🔍</span> Filters</div>
+      <p>Filter by route day, county, town, project type, status, and priority. Sort by bid date, value, or priority. Your filters remember where you left off.</p>
+      <span class="tag">FILTERING</span>
+    </div>
+  </div>
+
+  <div class="tip">
+    <div class="tip-icon">💡</div>
+    <div>Click any project row to edit it. Update the status when a bid is awarded, won, or lost — this keeps your pipeline stats accurate.</div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── TERRITORY MAP ── -->
+<div class="section" id="map">
+  <div class="section-header">
+    <div class="section-icon">🗺</div>
+    <div>
+      <div class="section-title">Territory Map</div>
+      <div class="section-sub">YOUR PINNED PROSPECTS ON A MAP</div>
+    </div>
+    <div class="section-num">03</div>
+  </div>
+
+  <div class="feature-list">
+    <div class="feature-row">
+      <div class="fi">📍</div>
+      <div><strong>Color-coded pins</strong><p>Each company is pinned with a color matching its route day — blue (MON), purple (TUE), green (WED), yellow (THU), red (FRI). Filter by day to see just your route for the day.</p></div>
+    </div>
+    <div class="feature-row">
+      <div class="fi">➕</div>
+      <div><strong>Add a company</strong><p>Tap "+ Add Company," fill in the name, town, type, phone, and route day. Coordinates auto-fill from the town name — or enter lat/lng manually for a precise pin.</p></div>
+    </div>
+    <div class="feature-row">
+      <div class="fi">⏰</div>
+      <div><strong>Set a follow-up reminder</strong><p>Tap the ⏰ button on any company to set a reminder date. Presets: Tomorrow, 3 Days, 1 Week, 2 Weeks, 1 Month. Overdue reminders surface on the Top Prospects screen.</p></div>
+    </div>
+    <div class="feature-row">
+      <div class="fi">🚗</div>
+      <div><strong>Waze & Maps links</strong><p>Select any company in the sidebar to reveal Waze, Google Maps, phone, and email buttons. One tap launches navigation directly to that address.</p></div>
+    </div>
+    <div class="feature-row">
+      <div class="fi">✎</div>
+      <div><strong>Edit or remove</strong><p>Use the ✎ and ✕ buttons next to any company in the sidebar to edit details or remove them from your map.</p></div>
+    </div>
+    <div class="feature-row">
+      <div class="fi">📍</div>
+      <div><strong>Find nearby prospects</strong><p>Tap "📍 NEARBY" in the top nav bar to search for construction companies near your current GPS location. Tap + ADD to instantly pin them to your map.</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── CHECK-IN ── -->
+<div class="section" id="checkin">
+  <div class="section-header">
+    <div class="section-icon">📍</div>
+    <div>
+      <div class="section-title">Check-In</div>
+      <div class="section-sub">GPS-VERIFIED SITE VISITS</div>
+    </div>
+    <div class="section-num">04</div>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Find the company</strong>
+        <p>Use the left sidebar to find the company you're visiting. Filter by route day or search by name.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>Tap CHECK IN</strong>
+        <p>A visit form appears — fill in what happened: contacted decision maker, left materials, quoted equipment, quote value, next step, and notes.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>GPS verifies your location</strong>
+        <p>Your phone's GPS checks if you're within 1,000 feet of the company's pin. Within range = ✓ Verified (green). Outside range = ⚠ Far (amber). Either way, the visit is logged.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>View today's visits</strong>
+        <p>The right panel shows all of today's check-ins with time, distance from pin, and status. Companies you've already visited show a blue ✓ badge.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-grid" style="margin-top:16px">
+    <div class="card">
+      <div class="card-title">✓ VERIFIED</div>
+      <p>GPS confirmed you were within 1,000 ft of the pin when you checked in.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">⚠ FAR</div>
+      <p>You were more than 1,000 ft from the pin. Visit is still logged — pin location may just be imprecise.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">• LOGGED</div>
+      <p>Company has no coordinates on file. Visit logged without distance verification.</p>
+    </div>
+  </div>
+
+  <div class="tip">
+    <div class="tip-icon">💡</div>
+    <div>Tap the <strong>History</strong> tab inside Check-In to see your full visit log. Filter by date to find any past visit.</div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── ROUTE PLANNER ── -->
+<div class="section" id="route">
+  <div class="section-header">
+    <div class="section-icon">🛣</div>
+    <div>
+      <div class="section-title">Route Planner</div>
+      <div class="section-sub">CLICK-TO-PLAN DAILY ROUTES</div>
+    </div>
+    <div class="section-num">05</div>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Click pins to build your route</strong>
+        <p>Click any company pin on the map to add it as a numbered stop. Click again to remove it. Filter by route day to see only that day's companies.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>Reorder stops</strong>
+        <p>Use the ↑ ↓ arrows in the left sidebar to reorder your stops. A dashed red line connects them on the map so you can see the route visually.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>Launch navigation</strong>
+        <p>Tap 🚗 Waze or 🗺 Maps to open your full multi-stop route in navigation. All stops are pre-loaded — no re-entering addresses.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>Save your route</strong>
+        <p>Name the route (e.g. "Monday Run Apr 28") and tap Save. It's stored under Saved Routes — tap LOAD to replay it any day, tap GO to launch navigation immediately.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── ACTIVITY LOG ── -->
+<div class="section" id="activity">
+  <div class="section-header">
+    <div class="section-icon">📅</div>
+    <div>
+      <div class="section-title">Activity Log</div>
+      <div class="section-sub">GOOGLE CALENDAR SYNC</div>
+    </div>
+    <div class="section-num">06</div>
+  </div>
+
+  <div class="feature-list">
+    <div class="feature-row">
+      <div class="fi">🗓</div>
+      <div><strong>Weekly calendar view</strong><p>Shows 7 days Mon–Sun. Each day displays your Google Calendar events — company name as the title, visit notes in the description. Use ‹ › arrows to go week by week, or tap TODAY to snap back.</p></div>
+    </div>
+    <div class="feature-row">
+      <div class="fi">⟳</div>
+      <div><strong>Sync button</strong><p>Tap ⟳ SYNC to pull the latest events from Google Calendar. Events update automatically when you change weeks.</p></div>
+    </div>
+    <div class="feature-row">
+      <div class="fi">📤</div>
+      <div><strong>Share to Manager</strong><p>Each day with events shows a SHARE button. Tap it to submit that day's activity snapshot to your manager. Once shared, it turns green with a ✓.</p></div>
+    </div>
+    <div class="feature-row">
+      <div class="fi">📋</div>
+      <div><strong>Submitted reports</strong><p>The right sidebar shows all reports you've shared. Managers see every rep's submissions with a rep filter dropdown.</p></div>
+    </div>
+  </div>
+
+  <div class="tip">
+    <div class="tip-icon">💡</div>
+    <div>Log your field stops in Google Calendar using the company name as the event title and your visit notes in the description. RepRoute pulls both automatically.</div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── MILEAGE ── -->
+<div class="section" id="mileage">
+  <div class="section-header">
+    <div class="section-icon">🚗</div>
+    <div>
+      <div class="section-title">Mileage Tracker</div>
+      <div class="section-sub">AUTOMATIC EXPENSE TRACKING</div>
+    </div>
+    <div class="section-num">07</div>
+  </div>
+
+  <div class="feature-list">
+    <div class="feature-row">
+      <div class="fi">📏</div>
+      <div><strong>Auto-calculated miles</strong><p>Every route you save in Route Planner automatically calculates the total miles driven based on your stops' coordinates. No manual entry needed.</p></div>
+    </div>
+    <div class="feature-row">
+      <div class="fi">💵</div>
+      <div><strong>IRS reimbursement</strong><p>Mileage is automatically multiplied by the current IRS standard rate ($0.67/mile) to show your weekly reimbursement total.</p></div>
+    </div>
+    <div class="feature-row">
+      <div class="fi">⬇</div>
+      <div><strong>Export CSV</strong><p>Tap "Export CSV" to download a spreadsheet of the week's routes, dates, stops, miles, and reimbursement amounts — ready to submit to your manager.</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── TOP PROSPECTS ── -->
+<div class="section" id="prospects">
+  <div class="section-header">
+    <div class="section-icon">🎯</div>
+    <div>
+      <div class="section-title">Top Prospects</div>
+      <div class="section-sub">YOUR DAILY CALL LIST, RANKED</div>
+    </div>
+    <div class="section-num">08</div>
+  </div>
+
+  <p style="color:var(--grey);font-size:13px;margin-bottom:20px;">Tap <strong style="color:var(--white)">🎯 TOP PROSPECTS</strong> in the top nav to see your companies ranked by heat score. The algorithm considers:</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">🔥 Priority</div>
+      <p>High-priority companies score higher. Set priority when adding or editing a company.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">📅 Visit recency</div>
+      <p>Companies you haven't visited in 30+ days score higher. Companies visited recently score lower.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">🏗 Local bids</div>
+      <p>Companies in towns with active bids in your pipeline score higher — more opportunity nearby.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">⚡ Action alerts</div>
+      <p>Overdue follow-up reminders and high-priority companies not visited in 30+ days show as action items at the top.</p>
+    </div>
+  </div>
+
+  <div class="tip">
+    <div class="tip-icon">💡</div>
+    <div>Check Top Prospects every morning before you head out. It tells you exactly who to hit first based on what's actually happening in your territory.</div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── PROPOSAL BUILDER ── -->
+<div class="section" id="proposal">
+  <div class="section-header">
+    <div class="section-icon">📄</div>
+    <div>
+      <div class="section-title">Proposal Builder</div>
+      <div class="section-sub">SEND QUOTES FROM THE FIELD</div>
+    </div>
+    <div class="section-num">09</div>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Tap 📄 PROPOSAL in the nav bar</strong>
+        <p>Available from any screen — no need to leave what you're doing.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>Fill in company and contact details</strong>
+        <p>Enter the company name, contact name, and email address.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>Add equipment items</strong>
+        <p>Select equipment from the dropdown (excavators, skid steers, lifts, generators, etc.), set quantity, rental duration, and daily rate. Add as many items as needed.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>Preview and send</strong>
+        <p>Tap PREVIEW to see the formatted proposal, then SEND to open it in your email app pre-filled and ready to send. Or tap COPY to paste it anywhere.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── MANAGER FEATURES ── -->
+<div class="section" id="manager">
+  <div class="section-header">
+    <div class="section-icon">🏆</div>
+    <div>
+      <div class="section-title">Manager Features</div>
+      <div class="section-sub">TEAM VISIBILITY & REPORTING</div>
+    </div>
+    <div class="section-num">10</div>
+  </div>
+
+  <div class="feature-list">
+    <div class="feature-row">
+      <div class="fi">🏆</div>
+      <div><strong>Rep Leaderboard</strong><p>The LEADERBOARD tab (visible to managers) ranks all reps by check-ins, GPS-verified visits, and reports submitted. Filter by 7-day, 30-day, or all-time. Updates in real time.</p></div>
+    </div>
+    <div class="feature-row">
+      <div class="fi">📍</div>
+      <div><strong>Check-In History</strong><p>In the Check-In tab, the History screen shows every rep's visits. Filter by rep or date. See distance from pin and GPS verification status for each visit.</p></div>
+    </div>
+    <div class="feature-row">
+      <div class="fi">📤</div>
+      <div><strong>Submitted Reports</strong><p>In the Activity Log, the right sidebar shows all reports from every rep. Filter by rep name to review any individual's daily activity.</p></div>
+    </div>
+    <div class="feature-row">
+      <div class="fi">👤</div>
+      <div><strong>Role assignment</strong><p>Reps are set as "rep" role by default. Contact your admin to be assigned the "manager" role, which unlocks the leaderboard and all-rep views.</p></div>
+    </div>
+  </div>
+
+  <div class="warn">
+    <div class="tip-icon">⚠</div>
+    <div>Manager views are only visible to accounts with the manager role. If you should have manager access and don't, contact your RepRoute admin.</div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ── TIPS ── -->
+<div class="section" id="tips">
+  <div class="section-header">
+    <div class="section-icon">💡</div>
+    <div>
+      <div class="section-title">Tips & Shortcuts</div>
+      <div class="section-sub">GET THE MOST OUT OF REPROUTE</div>
+    </div>
+    <div class="section-num">11</div>
+  </div>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="card-title">⚙ Customize routes</div>
+      <p>Tap ⚙ ROUTES in the nav to rename your route days to match your territory. Each rep's names are saved independently.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">🌤 Weather check</div>
+      <p>The weather widget in the nav bar shows current conditions and a green "FIELD OK" or amber "CHECK CONDITIONS" indicator before you head out.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">📴 Offline mode</div>
+      <p>A red OFFLINE banner appears when you lose signal. Check-ins are saved locally and sync automatically when you reconnect.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">🔁 Sign out</div>
+      <p>Tap SIGN OUT in the top right. Your data stays in the database — everything will be there next time you log in.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">📱 Add to home screen</div>
+      <p>For the best experience, add RepRoute to your iPhone or Android home screen. It launches full-screen like a native app.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">🔒 Your data is private</div>
+      <p>Each rep only sees their own companies, bids, and check-ins. No rep can see another's data unless they are a manager.</p>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div style="font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:3px;color:#1a1a1a;margin-bottom:8px">REP<span>ROUTE</span></div>
+  FIELD SALES INTELLIGENCE · HELP GUIDE v1 · REPROUTE.TECH
+</footer>
+
+</body>
+</html>
