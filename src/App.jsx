@@ -3886,6 +3886,254 @@ function AutoPlayPanel({ companies, checkIns, followUps }) {
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  LASSO ROUTE OPTIMIZER  (draw circle on map → auto-route)
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  AI BID FEED  (Daily AI-extracted projects for review)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function AIBidFeed() {
+  const [items, setItems]         = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [scanning, setScanning]   = useState(false);
+  const [filter, setFilter]       = useState("pending"); // pending | approved | dismissed
+  const [approving, setApproving] = useState(null);
+  const [stats, setStats]         = useState({ pending:0, approved:0, dismissed:0 });
+
+  const token = JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY;
+  const EDGE_URL = `${SUPABASE_URL}/functions/v1/bid-feed`;
+
+  const load = async () => {
+    try {
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/bid_feed_queue?review_status=eq.${filter}&order=created_at.desc&limit=100`,
+        { headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}` } }
+      );
+      const d = await r.json();
+      setItems(Array.isArray(d) ? d : []);
+
+      // Load stats
+      const counts = await Promise.all(["pending","approved","dismissed"].map(s =>
+        fetch(`${SUPABASE_URL}/rest/v1/bid_feed_queue?review_status=eq.${s}&select=id`, {
+          headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`, "Prefer": "count=exact", "Range": "0-0" }
+        }).then(r => ({ status: s, count: parseInt(r.headers.get("content-range")?.split("/")[1] || "0") }))
+      ));
+      const s = {};
+      counts.forEach(c => s[c.status] = c.count);
+      setStats(s);
+    } catch(e) { console.error(e); }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [filter]);
+
+  // Trigger manual scan
+  const runScan = async () => {
+    setScanning(true);
+    try {
+      const r = await fetch(EDGE_URL, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+      });
+      const d = await r.json();
+      alert(`✅ Scan complete! Found ${d.totalNew || 0} new projects.`);
+      setFilter("pending");
+      await load();
+    } catch(e) {
+      alert("Scan failed — check that the Edge Function is deployed. Error: " + e.message);
+    }
+    setScanning(false);
+  };
+
+  // Approve — add to projects table
+  const approve = async (item) => {
+    setApproving(item.id);
+    const uid = getUserId();
+    try {
+      // Add to projects
+      await fetch(`${SUPABASE_URL}/rest/v1/projects`, {
+        method: "POST",
+        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+        body: JSON.stringify({
+          user_id:    uid,
+          project:    item.project_name,
+          owner:      item.owner || "",
+          gc:         item.gc || "TBD",
+          value:      item.value || 0,
+          type:       item.type || "Commercial",
+          county:     item.county || "",
+          state:      item.state || "CT",
+          town:       item.town || "",
+          bid_date:   item.bid_date || null,
+          award_date: null,
+          status:     "Not Contacted",
+          priority:   item.priority || "Medium",
+          notes:      item.notes || "",
+          source:     item.source || "AI Feed",
+        })
+      });
+
+      // Mark as approved
+      await fetch(`${SUPABASE_URL}/rest/v1/bid_feed_queue?id=eq.${item.id}`, {
+        method: "PATCH",
+        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+        body: JSON.stringify({ review_status: "approved", reviewed_at: new Date().toISOString(), reviewed_by: uid })
+      });
+
+      setItems(prev => prev.filter(i => i.id !== item.id));
+      setStats(s => ({ ...s, pending: s.pending-1, approved: s.approved+1 }));
+    } catch(e) { alert("Approve failed: " + e.message); }
+    setApproving(null);
+  };
+
+  // Dismiss
+  const dismiss = async (id) => {
+    await fetch(`${SUPABASE_URL}/rest/v1/bid_feed_queue?id=eq.${id}`, {
+      method: "PATCH",
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`, "Content-Type": "application/json", "Prefer": "return=minimal" },
+      body: JSON.stringify({ review_status: "dismissed", reviewed_at: new Date().toISOString() })
+    });
+    setItems(prev => prev.filter(i => i.id !== id));
+    setStats(s => ({ ...s, pending: s.pending-1, dismissed: s.dismissed+1 }));
+  };
+
+  const fmt$ = v => v >= 1000000 ? `$${(v/1000000).toFixed(1)}M` : v >= 1000 ? `$${(v/1000).toFixed(0)}K` : v > 0 ? `$${v}` : "—";
+  const fmtDate = d => { try { return new Date(d).toLocaleDateString("en-US",{month:"short",day:"numeric"}); } catch { return "—"; }};
+
+  const CONF_COLOR = c => c >= 80 ? "#4ae87a" : c >= 60 ? "#e8c84a" : "#e8873a";
+  const PRIORITY_COLOR = p => p==="High"?"#cc2222":p==="Medium"?"#e8873a":"#555";
+
+  if (loading) return (
+    <div style={{height:"calc(100vh-54px)",background:"#0a0a0a",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{color:"#e8e8e8",fontFamily:"'Bebas Neue',sans-serif",fontSize:24,letterSpacing:3}}>LOADING FEED...</div>
+    </div>
+  );
+
+  return (
+    <div style={{background:"#0a0a0a",color:"#f5f5f5",fontFamily:"'DM Sans',sans-serif",minHeight:"calc(100vh - 54px)"}}>
+
+      {/* Header */}
+      <div style={{background:"#0d0d0d",borderBottom:"1px solid #1a1a1a",padding:"10px 24px",display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+        <div>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,letterSpacing:3,color:"#e8e8e8"}}>📡 AI BID FEED</div>
+          <div style={{fontSize:10,color:"#444",fontFamily:"monospace",letterSpacing:2}}>AUTO-SCANNED FROM CT + MA SOURCES · DAILY AT 6AM</div>
+        </div>
+
+        {/* Stats */}
+        <div style={{display:"flex",gap:12,marginLeft:16}}>
+          {[["pending","PENDING","#e8873a"],["approved","APPROVED","#4ae87a"],["dismissed","DISMISSED","#444"]].map(([s,label,color])=>(
+            <button key={s} onClick={()=>setFilter(s)}
+              style={{textAlign:"center",background:filter===s?"#111":"transparent",border:`1px solid ${filter===s?color:"#1a1a1a"}`,borderRadius:6,padding:"6px 12px",cursor:"pointer"}}>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color,lineHeight:1}}>{stats[s]||0}</div>
+              <div style={{fontSize:8,color:"#444",fontFamily:"monospace",letterSpacing:1}}>{label}</div>
+            </button>
+          ))}
+        </div>
+
+        <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
+          <button onClick={runScan} disabled={scanning}
+            style={{padding:"8px 18px",background:scanning?"#111":"#1a0a0a",border:`1px solid ${scanning?"#333":"#cc2222"}`,borderRadius:6,color:scanning?"#444":"#cc2222",cursor:scanning?"wait":"pointer",fontSize:11,fontFamily:"monospace",letterSpacing:1,fontWeight:700}}>
+            {scanning ? "⏳ SCANNING..." : "⟳ RUN SCAN NOW"}
+          </button>
+        </div>
+      </div>
+
+      {/* Feed items */}
+      <div style={{padding:"16px 24px"}}>
+        {items.length === 0 ? (
+          <div style={{textAlign:"center",padding:"60px 20px"}}>
+            <div style={{fontSize:32,marginBottom:16}}>📡</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,letterSpacing:3,color:"#333",marginBottom:8}}>
+              {filter === "pending" ? "NO PENDING ITEMS" : `NO ${filter.toUpperCase()} ITEMS`}
+            </div>
+            <div style={{fontSize:11,color:"#2a2a2a",fontFamily:"monospace",lineHeight:1.8}}>
+              {filter === "pending"
+                ? "Tap RUN SCAN NOW to fetch projects from CT and MA sources.
+Scans run automatically every day at 6am once the Edge Function is deployed."
+                : `No ${filter} items yet.`}
+            </div>
+          </div>
+        ) : (
+          <div style={{display:"grid",gap:10,maxWidth:1000,margin:"0 auto"}}>
+            {items.map(item => (
+              <div key={item.id} style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderLeft:`3px solid ${PRIORITY_COLOR(item.priority)}`,borderRadius:8,padding:"14px 18px"}}>
+                <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+
+                  {/* Main info */}
+                  <div style={{flex:1,overflow:"hidden"}}>
+                    <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:6,flexWrap:"wrap"}}>
+                      <div style={{fontSize:13,fontWeight:700,color:"#e8e8e8"}}>{item.project_name}</div>
+                      {/* Confidence badge */}
+                      <div style={{fontSize:8,padding:"2px 6px",borderRadius:3,background:"#111",border:`1px solid ${CONF_COLOR(item.confidence)}`,color:CONF_COLOR(item.confidence),fontFamily:"monospace",flexShrink:0}}>
+                        {item.confidence}% CONF
+                      </div>
+                      <div style={{fontSize:8,padding:"2px 6px",borderRadius:3,background:"#111",border:"1px solid #333",color:"#555",fontFamily:"monospace",flexShrink:0}}>
+                        {item.source}
+                      </div>
+                    </div>
+
+                    <div style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:6}}>
+                      <span style={{fontSize:11,color:"#888"}}>{item.town}{item.county?`, ${item.county} Co`:""} · {item.state}</span>
+                      <span style={{fontSize:11,color:"#4a9eff",fontFamily:"monospace",fontWeight:700}}>{fmt$(item.value)}</span>
+                      {item.bid_date && <span style={{fontSize:11,color:"#666"}}>Bid: {fmtDate(item.bid_date)}</span>}
+                      <span style={{fontSize:11,color:"#555"}}>{item.type}</span>
+                    </div>
+
+                    {item.gc && item.gc !== "TBD" && (
+                      <div style={{fontSize:11,color:"#666",marginBottom:4}}>GC: {item.gc}</div>
+                    )}
+                    {item.notes && (
+                      <div style={{fontSize:11,color:"#555",lineHeight:1.5}}>{item.notes.slice(0,150)}{item.notes.length>150?"...":""}</div>
+                    )}
+                    <div style={{fontSize:9,color:"#2a2a2a",fontFamily:"monospace",marginTop:4}}>
+                      Scanned {new Date(item.created_at).toLocaleDateString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}
+                    </div>
+                  </div>
+
+                  {/* Action buttons */}
+                  {filter === "pending" && (
+                    <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0}}>
+                      <button onClick={() => approve(item)} disabled={approving===item.id}
+                        style={{padding:"8px 16px",background:"#0a1a0a",border:"1px solid #2a6a2a",borderRadius:5,color:"#4ae87a",cursor:approving===item.id?"wait":"pointer",fontSize:11,fontFamily:"monospace",fontWeight:700,letterSpacing:1,whiteSpace:"nowrap"}}>
+                        {approving===item.id ? "..." : "✓ ADD TO BIDS"}
+                      </button>
+                      <button onClick={() => dismiss(item.id)}
+                        style={{padding:"8px 16px",background:"transparent",border:"1px solid #2a2a2a",borderRadius:5,color:"#444",cursor:"pointer",fontSize:11,fontFamily:"monospace",letterSpacing:1}}>
+                        ✕ DISMISS
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* How it works info box */}
+      {filter === "pending" && items.length === 0 && (
+        <div style={{maxWidth:600,margin:"0 auto",padding:"0 24px 40px"}}>
+          <div style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:10,padding:"20px 24px"}}>
+            <div style={{fontSize:10,color:"#cc2222",fontFamily:"monospace",letterSpacing:2,marginBottom:12}}>HOW IT WORKS</div>
+            {[
+              ["📡","Scans 6 sources","CT DOT, MA Commbuys, CT Construction News, Berkshire Eagle, Republican-American, and more"],
+              ["🤖","AI extracts data","Claude reads each source and pulls project name, GC, value, town, bid date, and priority"],
+              ["📋","You review","Each AI-found project shows a confidence score. Tap ✓ ADD TO BIDS to add it to your tracker, or DISMISS to skip it"],
+              ["⏰","Runs daily","The Edge Function scans automatically every morning at 6am — your feed is always fresh"],
+            ].map(([icon, title, desc]) => (
+              <div key={title} style={{display:"flex",gap:12,marginBottom:14,alignItems:"flex-start"}}>
+                <span style={{fontSize:18,flexShrink:0}}>{icon}</span>
+                <div>
+                  <div style={{fontSize:12,fontWeight:600,color:"#e8e8e8",marginBottom:2}}>{title}</div>
+                  <div style={{fontSize:11,color:"#555"}}>{desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState("bids");
   const [session, setSession] = useState(() => getSession());
@@ -4015,6 +4263,7 @@ export default function App() {
     { id: "checkin",   label: "CHECK-IN",        icon: "📍" },
     { id: "mileage",   label: "MILEAGE",          icon: "🚗" },
     { id: "leaderboard", label: "LEADERBOARD",    icon: "🏆" },
+    { id: "feed",        label: "AI BID FEED",      icon: "📡" },
   ];
 
   return (
@@ -4161,6 +4410,7 @@ export default function App() {
       )}
       {view === "mileage" && <MileageTracker />}
       {view === "leaderboard" && <RepLeaderboard />}
+      {view === "feed" && <AIBidFeed />}
 
       {/* ── Global modals (available from any view) ── */}
       {showProposal && <ProposalBuilder onClose={()=>setShowProposal(false)} />}
