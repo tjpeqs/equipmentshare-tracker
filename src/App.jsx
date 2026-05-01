@@ -266,6 +266,88 @@ function BidModal({ bid, onClose, onSave, saving }) {
 }
 
 // ── Import Modal ─────────────────────────────────────────────────────────────
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  CLEAR DATA BUTTON  (Wipe imported projects, re-import fresh)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function ClearDataButton() {
+  const [clearing, setClearing] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [clearType, setClearType] = useState("imported"); // imported | all
+
+  const token = JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY;
+  const uid = getUserId();
+
+  const clear = async () => {
+    setClearing(true);
+    try {
+      if (clearType === "imported") {
+        // Delete only Dodge/Imported source records
+        await fetch(`${SUPABASE_URL}/rest/v1/projects?user_id=eq.${uid}&source=in.(Dodge,Imported,AI+Feed)`, {
+          method: "DELETE",
+          headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`, "Prefer": "return=minimal" }
+        });
+      } else {
+        // Delete ALL projects for this user
+        await fetch(`${SUPABASE_URL}/rest/v1/projects?user_id=eq.${uid}`, {
+          method: "DELETE",
+          headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`, "Prefer": "return=minimal" }
+        });
+      }
+      // Clear local cache
+      localStorage.removeItem(`offline_bids_${uid}`);
+      setShowConfirm(false);
+      // Reload page to refresh data
+      window.location.reload();
+    } catch(e) {
+      alert("Clear failed: " + e.message);
+    }
+    setClearing(false);
+  };
+
+  return (
+    <>
+      <button onClick={() => setShowConfirm(true)}
+        style={{padding:"6px 14px",background:"#1a0a0a",border:"1px solid #cc2222",borderRadius:6,color:"#cc2222",cursor:"pointer",fontSize:11,fontFamily:"monospace",letterSpacing:1,fontWeight:700,flexShrink:0}}>
+        🗑 CLEAR DATA
+      </button>
+
+      {showConfirm && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+          <div style={{background:"#0d0d0d",border:"1px solid #cc2222",borderRadius:12,padding:28,width:"100%",maxWidth:400}}>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,letterSpacing:3,color:"#e8e8e8",marginBottom:6}}>CLEAR PROJECT DATA</div>
+            <div style={{fontSize:11,color:"#555",fontFamily:"monospace",marginBottom:20}}>Choose what to delete:</div>
+
+            <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:20}}>
+              {[
+                ["imported", "🗑 Clear Imported Only", "Removes Dodge, eSEARCH, and AI Feed imports. Keeps projects you added manually."],
+                ["all", "⚠ Clear Everything", "Removes ALL projects including manually added ones. Cannot be undone."],
+              ].map(([val, label, desc]) => (
+                <button key={val} onClick={() => setClearType(val)}
+                  style={{padding:"12px 14px",background:clearType===val?(val==="all"?"#1a0808":"#0a1a0a"):"#111",border:`1px solid ${clearType===val?(val==="all"?"#cc2222":"#2a6a2a"):"#222"}`,borderRadius:6,color:clearType===val?(val==="all"?"#cc6666":"#4ae87a"):"#555",cursor:"pointer",textAlign:"left"}}>
+                  <div style={{fontSize:12,fontWeight:700,marginBottom:3}}>{label}</div>
+                  <div style={{fontSize:10,opacity:.7}}>{desc}</div>
+                </button>
+              ))}
+            </div>
+
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={() => setShowConfirm(false)}
+                style={{flex:1,padding:"10px",background:"none",border:"1px solid #333",borderRadius:6,color:"#555",cursor:"pointer",fontSize:12}}>
+                Cancel
+              </button>
+              <button onClick={clear} disabled={clearing}
+                style={{flex:2,padding:"10px",background:"#cc2222",border:"none",borderRadius:6,color:"#fff",cursor:clearing?"wait":"pointer",fontSize:12,fontWeight:700}}>
+                {clearing ? "Clearing..." : "Yes, Clear Data"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function ImportModal({ onClose, onImport, importing }) {
   const [text,setText]=useState(""); const [preview,setPreview]=useState([]); const fileRef=useRef();
   const handleFile=e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=ev=>{setText(ev.target.result);setPreview(parseDodgeCSV(ev.target.result));}; r.readAsText(f); };
@@ -274,8 +356,13 @@ function ImportModal({ onClose, onImport, importing }) {
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
       <div style={{background:"#0e0e18",border:"1px solid #2a2a44",borderRadius:12,width:"100%",maxWidth:740,maxHeight:"90vh",overflowY:"auto",padding:32,position:"relative"}}>
         <button onClick={onClose} style={{position:"absolute",top:16,right:20,background:"none",border:"none",color:"#666",fontSize:22,cursor:"pointer"}}>×</button>
-        <h2 style={{color:"#F5F5F5",fontFamily:"'Bebas Neue',sans-serif",fontSize:26,marginBottom:6,letterSpacing:1}}>IMPORT DATA</h2>
-        <p style={{color:"#888",fontSize:11,marginBottom:4,fontFamily:"monospace",letterSpacing:1}}>(Company, Address, Project Data)</p>
+        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:6}}>
+          <div>
+            <h2 style={{color:"#F5F5F5",fontFamily:"'Bebas Neue',sans-serif",fontSize:26,marginBottom:4,letterSpacing:1}}>IMPORT DATA</h2>
+            <p style={{color:"#888",fontSize:11,fontFamily:"monospace",letterSpacing:1}}>(Company, Address, Project Data)</p>
+          </div>
+          <ClearDataButton />
+        </div>
         <p style={{color:"#555",fontSize:13,marginBottom:20}}>Import a CSV from any source — Dodge, eSEARCH, spreadsheets, or your own data. Projects save directly to your live database.</p>
         <div style={{background:"#0f0f0f",border:"1px solid #1e1e38",borderRadius:8,padding:16,marginBottom:20,fontSize:12,color:"#555",fontFamily:"monospace",lineHeight:1.8}}>
           1. Go to <span style={{color:"#7a88cc"}}>construction.com</span> → Search Projects<br/>
