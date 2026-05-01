@@ -4055,8 +4055,7 @@ function AIBidFeed() {
             </div>
             <div style={{fontSize:11,color:"#2a2a2a",fontFamily:"monospace",lineHeight:1.8}}>
               {filter === "pending"
-                ? "Tap RUN SCAN NOW to fetch projects from CT and MA sources.
-Scans run automatically every day at 6am once the Edge Function is deployed."
+                ? "Tap RUN SCAN NOW to fetch projects from CT and MA sources. Scans run automatically every day at 6am once the Edge Function is deployed."
                 : `No ${filter} items yet.`}
             </div>
           </div>
