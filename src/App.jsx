@@ -4250,10 +4250,10 @@ export default function App() {
     setSession(s);
   }, []);
 
-  // Check onboarding status
+  // Check onboarding status — only when logged in
   useEffect(() => {
     const uid = getUserId();
-    if (!uid) { setOnboarded(false); return; }
+    if (!uid || !session?.access_token) { setOnboarded(null); return; }
     const token = JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY;
     fetch(`${SUPABASE_URL}/rest/v1/user_settings?user_id=eq.${uid}&key=eq.onboarded&select=value`, {
       headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}`}
@@ -4327,12 +4327,12 @@ export default function App() {
     setEditingRoutes(false);
   };
 
-  // Not logged in — show login screen
+  // Not logged in — show login screen (always check this first)
   if (!session?.access_token) {
     return <LoginScreen />;
   }
 
-  // Still checking onboarding status
+  // Still checking onboarding status — show loading, never block with wizard
   if (onboarded === null) {
     return (
       <div style={{minHeight:"100vh",background:"#0a0a0a",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -4341,8 +4341,8 @@ export default function App() {
     );
   }
 
-  // Show onboarding wizard for new users
-  if (onboarded === false) {
+  // Show onboarding wizard ONLY if logged in AND not yet onboarded
+  if (onboarded === false && session?.access_token) {
     return <OnboardingWizard onComplete={({ name, territory, role, routes }) => {
       DAY_CONFIG = getDAYCONFIG(routes);
       setUserRoutes(routes);
