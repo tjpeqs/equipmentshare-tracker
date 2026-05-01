@@ -2714,22 +2714,24 @@ function DailyReportModal({ onClose }) {
   const fmtTime = iso => { try { return new Date(iso).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",hour12:true}); } catch { return ""; }};
   const today = new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});
 
-  const reportText = `DAILY FIELD REPORT — ${today.toUpperCase()}
-Rep: ${repName}
-─────────────────────────────────────────
-
-SITE VISITS (${checkIns.length})
-${checkIns.length === 0 ? "No check-ins logged today." : checkIns.map((ci,i) =>
-  `${i+1}. ${ci.company_name} — ${ci.company_town}
-   Time: ${fmtTime(ci.checked_in_at)} | GPS: ${ci.status === "verified" ? "✓ Verified" : ci.status === "out_of_range" ? "⚠ Far from site" : "Logged"}${ci.distance_ft ? " (" + ci.distance_ft.toLocaleString() + " ft from pin)" : ""}`
-).join("
-")}
-
-NOTES
-${notes.trim() || "No additional notes."}
-
-─────────────────────────────────────────
-Submitted via RepRoute Field Sales Intelligence`;
+  const reportText = [
+    "DAILY FIELD REPORT — " + today.toUpperCase(),
+    "Rep: " + repName,
+    "─────────────────────────────────────────",
+    "",
+    "SITE VISITS (" + checkIns.length + ")",
+    checkIns.length === 0 ? "No check-ins logged today." : checkIns.map((ci,i) =>
+      (i+1) + ". " + ci.company_name + " — " + ci.company_town + "\n" +
+      "   Time: " + fmtTime(ci.checked_in_at) + " | GPS: " + (ci.status === "verified" ? "✓ Verified" : ci.status === "out_of_range" ? "⚠ Far from site" : "Logged") +
+      (ci.distance_ft ? " (" + ci.distance_ft.toLocaleString() + " ft from pin)" : "")
+    ).join("\n"),
+    "",
+    "NOTES",
+    notes.trim() || "No additional notes.",
+    "",
+    "─────────────────────────────────────────",
+    "Submitted via RepRoute Field Sales Intelligence"
+  ].join("\n");
 
   const copy = () => {
     navigator.clipboard.writeText(reportText).then(() => {
@@ -3329,8 +3331,7 @@ function MileageTracker() {
                 return `"${r.name}","${r.date||""}","${(r.stops||[]).length}","${m.toFixed(1)}","$${(m*IRS_RATE).toFixed(2)}"`;
               }),
               `"TOTAL","","${weekRoutes.reduce((s,r)=>s+(r.stops||[]).length,0)}","${totalMiles.toFixed(1)}","$${totalReimbursement.toFixed(2)}"`,
-            ].join("
-");
+            ].join("\n");
             const blob = new Blob([csv], {type:"text/csv"});
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
