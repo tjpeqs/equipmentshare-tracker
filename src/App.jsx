@@ -891,17 +891,25 @@ function TerritoryMap() {
 
       const marker = L.marker([c.lat, c.lng], { icon });
       marker.bindPopup(`
-        <div style="font-family:monospace;min-width:140px;background:#111;color:#f5f5f5;padding:6px;border-radius:4px">
-          <div style="color:${color};font-size:10px;letter-spacing:1px;margin-bottom:4px">${c.day || ""} · ${c.type || ""}</div>
+        <div style="font-family:monospace;min-width:180px;background:#111;color:#f5f5f5;padding:10px;border-radius:6px">
+          <div style="color:${color};font-size:9px;letter-spacing:1px;margin-bottom:4px">${c.day || ""} · ${c.type || ""}</div>
           <div style="font-weight:700;font-size:13px;margin-bottom:2px">${c.name}</div>
-          <div style="color:#888;font-size:11px;margin-bottom:6px">${c.town}, ${c.state}</div>
-          ${c.phone ? `<div style="color:#cc9900;font-size:11px;margin-bottom:6px">${c.phone}</div>` : ""}
-          ${c.lat && c.lng ? `<a href="https://waze.com/ul?ll=${c.lat},${c.lng}&navigate=yes" target="_blank"
-            style="display:block;padding:5px 8px;background:#05c8f7;border-radius:4px;color:#000;font-weight:700;font-size:11px;text-decoration:none;text-align:center">
-            🚗 Waze
-          </a>` : ""}
+          <div style="color:#888;font-size:11px;margin-bottom:8px">${c.town}, ${c.state}</div>
+          ${c.phone ? `<a href="tel:${c.phone}" style="display:block;padding:6px 8px;background:#1a1a1a;border:1px solid #333;border-radius:4px;color:#e8e8e8;font-size:11px;text-decoration:none;text-align:center;margin-bottom:5px">📞 ${c.phone}</a>` : ""}
+          <div style="display:flex;gap:5px;margin-bottom:5px">
+            ${c.lat && c.lng ? `<a href="https://waze.com/ul?ll=${c.lat},${c.lng}&navigate=yes" target="_blank"
+              style="flex:1;padding:6px 4px;background:#05c8f7;border-radius:4px;color:#000;font-weight:700;font-size:10px;text-decoration:none;text-align:center">
+              🚗 Waze
+            </a>` : ""}
+            ${c.lat && c.lng ? `<a href="https://maps.google.com/?q=${c.lat},${c.lng}" target="_blank"
+              style="flex:1;padding:6px 4px;background:#1a1a1a;border:1px solid #333;border-radius:4px;color:#888;font-size:10px;text-decoration:none;text-align:center">
+              🗺 Maps
+            </a>` : ""}
+          </div>
+          ${c.email ? `<a href="mailto:${c.email}" style="display:block;padding:6px 8px;background:#1a1a1a;border:1px solid #333;border-radius:4px;color:#4a9eff;font-size:10px;text-decoration:none;text-align:center;margin-bottom:5px">✉ ${c.email}</a>` : ""}
+          ${c.website ? `<a href="${c.website}" target="_blank" style="display:block;padding:6px 8px;background:#1a1a1a;border:1px solid #333;border-radius:4px;color:#888;font-size:10px;text-decoration:none;text-align:center">🌐 Website</a>` : ""}
         </div>
-      `, { className: "dark-popup" });
+      `, { className: "dark-popup", maxWidth: 220 });
 
       marker.on("click", () => setSelected(c));
       markerGroup.addLayer(marker);
@@ -2713,7 +2721,7 @@ Rep: ${repName}
 SITE VISITS (${checkIns.length})
 ${checkIns.length === 0 ? "No check-ins logged today." : checkIns.map((ci,i) =>
   `${i+1}. ${ci.company_name} — ${ci.company_town}
-   Time: ${fmtTime(ci.checked_in_at)} | GPS: ${ci.status === "verified" ? "✓ Verified" : ci.status === "out_of_range" ? "⚠ Far from site" : "Logged"}${ci.distance_ft ? ` (${ci.distance_ft.toLocaleString()} ft from pin)` : ""}`
+   Time: ${fmtTime(ci.checked_in_at)} | GPS: ${ci.status === "verified" ? "✓ Verified" : ci.status === "out_of_range" ? "⚠ Far from site" : "Logged"}${ci.distance_ft ? " (" + ci.distance_ft.toLocaleString() + " ft from pin)" : ""}`
 ).join("
 ")}
 
@@ -4288,16 +4296,19 @@ export default function App() {
       <div className="rr-nav" style={{
         background:"#0f0f0f",
         borderBottom:"1px solid #1e1e1e",
-        padding:"0 32px",
+        padding:"0 16px",
         display:"flex",
         alignItems:"stretch",
         height:54,
         position:"sticky",
         top:0,
         zIndex:999,
+        overflowX:"auto",
+        overflowY:"hidden",
+        scrollbarWidth:"none",
       }}>
         {/* Logo */}
-        <div style={{ display:"flex", alignItems:"center", gap:12, marginRight:32, paddingRight:32, borderRight:"1px solid #1e1e1e" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginRight:16, paddingRight:16, borderRight:"1px solid #1e1e1e", flexShrink:0 }}>
           {/* SVG Logo */}
           <a href="/" style={{textDecoration:"none",display:"flex",alignItems:"center"}}>
           <svg width="160" height="44" viewBox="0 0 160 44" style={{display:"block",flexShrink:0}}>
@@ -4335,10 +4346,10 @@ export default function App() {
                   borderBottom: active ? "2px solid #e8e8e8" : "2px solid transparent",
                   color: active ? "#ffffff" : "#555",
                   cursor:"pointer",
-                  padding:"0 20px",
-                  fontSize:11,
+                  padding:"0 12px",
+                  fontSize:10,
                   fontWeight:700,
-                  letterSpacing:2,
+                  letterSpacing:1,
                   fontFamily:"monospace",
                   display:"flex",
                   alignItems:"center",
@@ -4359,21 +4370,15 @@ export default function App() {
         <div className="rr-nav-right" style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:8 }}>
           {!isOnline && <div style={{padding:"3px 10px",background:"#1a0a0a",border:"1px solid #cc2222",borderRadius:10,fontSize:9,color:"#cc2222",fontFamily:"monospace",letterSpacing:1}}>● OFFLINE</div>}
           <WeatherWidget />
-          <button onClick={()=>setShowNearby(true)} style={{padding:"5px 10px",background:"none",border:"1px solid #2a2a2a",borderRadius:5,color:"#555",cursor:"pointer",fontSize:10}}>📍 NEARBY</button>
-          <button onClick={()=>setShowProposal(true)} style={{padding:"5px 10px",background:"none",border:"1px solid #2a2a2a",borderRadius:5,color:"#555",cursor:"pointer",fontSize:10}}>📄 PROPOSAL</button>
-          <span style={{ fontSize:9, color:"#333", fontFamily:"monospace", letterSpacing:1 }}>
-            v2
-          </span>
+          <button onClick={()=>setShowNearby(true)} style={{padding:"5px 8px",background:"none",border:"1px solid #2a2a2a",borderRadius:5,color:"#555",cursor:"pointer",fontSize:10,flexShrink:0}}>📍</button>
+          <button onClick={()=>setShowProposal(true)} style={{padding:"5px 8px",background:"none",border:"1px solid #2a2a2a",borderRadius:5,color:"#555",cursor:"pointer",fontSize:10,flexShrink:0}}>📄</button>
+          
           <button onClick={()=>setView("prospects")} style={{padding:"5px 12px",background:view==="prospects"?"#1a0a0a":"none",border:`1px solid ${view==="prospects"?"#cc2222":"#2a2a2a"}`,borderRadius:5,color:view==="prospects"?"#cc2222":"#555",cursor:"pointer",fontSize:11}}>
             🎯 TOP PROSPECTS
           </button>
-          <button onClick={()=>{setRouteDraft({...userRoutes});setEditingRoutes(true);}} style={{padding:"5px 12px",background:"none",border:"1px solid #2a2a2a",borderRadius:5,color:"#555",cursor:"pointer",fontSize:11}}>
-            ⚙ ROUTES
-          </button>
-          <a href="/help" target="_blank" style={{padding:"5px 10px",background:"none",border:"1px solid #2a2a2a",borderRadius:5,color:"#444",cursor:"pointer",fontSize:10,fontFamily:"monospace",letterSpacing:1,textDecoration:"none"}}>?</a>
-          <button onClick={signOut} style={{padding:"5px 12px",background:"none",border:"1px solid #2a2a2a",borderRadius:5,color:"#444",cursor:"pointer",fontSize:10,fontFamily:"monospace",letterSpacing:1}}>
-            SIGN OUT
-          </button>
+          <button onClick={()=>{setRouteDraft({...userRoutes});setEditingRoutes(true);}} style={{padding:"5px 8px",background:"none",border:"1px solid #2a2a2a",borderRadius:5,color:"#555",cursor:"pointer",fontSize:10,flexShrink:0}}>⚙</button>
+          <a href="/help" target="_blank" style={{padding:"5px 8px",background:"none",border:"1px solid #2a2a2a",borderRadius:5,color:"#444",cursor:"pointer",fontSize:10,fontFamily:"monospace",textDecoration:"none",flexShrink:0}}>?</a>
+          <button onClick={signOut} style={{padding:"5px 8px",background:"none",border:"1px solid #2a2a2a",borderRadius:5,color:"#444",cursor:"pointer",fontSize:9,fontFamily:"monospace",flexShrink:0}}>OUT</button>
         </div>
       </div>
 
