@@ -43,20 +43,63 @@ function getUserId() {
 
 function getSession() {
   // Check URL hash for token (after Google redirect)
+  // Supabase can return tokens in hash OR query params
   const hash = window.location.hash;
+  const search = window.location.search;
+
+  // Try hash first (most common)
   if (hash && hash.includes("access_token")) {
-    const params = new URLSearchParams(hash.replace("#", ""));
+    const params = new URLSearchParams(hash.replace(/^#/, ""));
     const session = {
       access_token:   params.get("access_token"),
       refresh_token:  params.get("refresh_token"),
       expires_in:     params.get("expires_in"),
-      provider_token: params.get("provider_token"), // Google OAuth token for Calendar API
+      provider_token: params.get("provider_token"),
     };
-    localStorage.setItem("sb_session", JSON.stringify(session));
-    window.location.hash = "";
-    return session;
+    if (session.access_token) {
+      localStorage.setItem("sb_session", JSON.stringify(session));
+      // Clear hash without triggering reload
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+      return session;
+    }
   }
-  return JSON.parse(localStorage.getItem("sb_session") || "null");
+
+  // Try query params (some Supabase configs)
+  if (search && search.includes("access_token")) {
+    const params = new URLSearchParams(search);
+    const session = {
+      access_token:   params.get("access_token"),
+      refresh_token:  params.get("refresh_token"),
+      expires_in:     params.get("expires_in"),
+      provider_token: params.get("provider_token"),
+    };
+    if (session.access_token) {
+      localStorage.setItem("sb_session", JSON.stringify(session));
+      history.replaceState(null, "", window.location.pathname);
+      return session;
+    }
+  }
+
+  // Fall back to stored session
+  try {
+    const stored = localStorage.getItem("sb_session");
+    if (!stored) return null;
+    const parsed = JSON.parse(stored);
+    // Check if token is expired
+    if (parsed?.expires_in) {
+      const savedAt = localStorage.getItem("sb_session_saved_at");
+      if (savedAt) {
+        const elapsed = (Date.now() - parseInt(savedAt)) / 1000;
+        if (elapsed > parseInt(parsed.expires_in) - 60) {
+          // Token expired - clear and return null
+          localStorage.removeItem("sb_session");
+          localStorage.removeItem("sb_session_saved_at");
+          return null;
+        }
+      }
+    }
+    return parsed;
+  } catch { return null; }
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -718,7 +761,7 @@ const STATE_OPTIONS = ["CT","MA"];
 const TYPE_ICONS = { GC:"🏗", Excavation:"⛏", Paving:"🚧", Roofing:"🏠", Industrial:"🏭", Other:"📍" };
 const PRIORITY_COLORS_MAP = { High:"#e8e8e8", Medium:"#4a9eff", Low:"#555" };
 
-const BLANK_COMPANY = { name:"", day:"Monday", type:"GC", lat:"", lng:"", town:"", state:"CT", phone:"", email:"", notes:"", priority:"Medium", website:"", contact:"" };
+const BLANK_COMPANY = { name:"", day:"Monday", type:"GC", lat:"", lng:"", town:"", state:"CT", phone:"", email:"", notes:"", priority:"Medium", website:"", contact:"", shared:false };
 
 function CompanyModal({ company, onClose, onSave, saving }) {
   const [form, setForm] = useState(company || BLANK_COMPANY);
@@ -830,6 +873,20 @@ function CompanyModal({ company, onClose, onSave, saving }) {
             <input value={form.website||""} onChange={e=>set("website",e.target.value)} placeholder="https://..."
               style={{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:"#4a9eff",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"}}/>
           </div>
+
+          {/* Shared Pool Toggle — managers only */}
+          <div style={{gridColumn:"1 / -1"}}>
+            <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",background:form.shared?"#0a1a0a":"#111",border:`1px solid ${form.shared?"#2a6a2a":"#1a1a1a"}`,borderRadius:6}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:12,fontWeight:600,color:form.shared?"#4ae87a":"#888",marginBottom:2}}>🏢 Add to Shared Team Pool</div>
+                <div style={{fontSize:10,color:"#444"}}>Shared companies are visible to all reps but only editable by managers.</div>
+              </div>
+              <button onClick={()=>set("shared",!form.shared)}
+                style={{padding:"6px 16px",background:form.shared?"#0a3a1a":"#1a1a1a",border:`1px solid ${form.shared?"#2a6a2a":"#333"}`,borderRadius:5,color:form.shared?"#4ae87a":"#555",cursor:"pointer",fontSize:11,fontWeight:700,fontFamily:"monospace",flexShrink:0}}>
+                {form.shared ? "✓ SHARED" : "PRIVATE"}
+              </button>
+            </div>
+          </div>
         </div>
 
         <div style={{display:"flex",gap:10,marginTop:24,justifyContent:"flex-end"}}>
@@ -860,6 +917,162 @@ const TOWN_COORDS = {
   "Southwick":{lat:42.0579,lng:-72.7734},"Ludlow":{lat:42.1614,lng:-72.4801},
 };
 
+
+// ── Map CRM Panel (slide-in from Territory Map) ───────────────
+function MapCRMPanel({ company, onClose }) {
+  const [interactions, setInteractions] = useState([]);
+  const [contacts, setContacts]         = useState([]);
+  const [deals, setDeals]               = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [tab, setTab]                   = useState("timeline");
+  const [showLog, setShowLog]           = useState(false);
+  const [showDeal, setShowDeal]         = useState(false);
+  const [showContact, setShowContact]   = useState(false);
+
+  const token = JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY;
+  const uid = getUserId();
+  let repName = "Rep";
+  try { const p = JSON.parse(atob(token.split(".")[1])); repName = p.user_metadata?.full_name||p.email?.split("@")[0]||"Rep"; } catch {}
+
+  useEffect(() => {
+    if (!company) return;
+    const q = `company_id=eq.${company.id}`;
+    Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/crm_interactions?${q}&order=created_at.desc&limit=50`, { headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`} }).then(r=>r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/crm_contacts?${q}&order=created_at.desc&limit=20`, { headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`} }).then(r=>r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/crm_deals?${q}&order=updated_at.desc&limit=10`, { headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`} }).then(r=>r.json()),
+    ]).then(([i,c,d]) => {
+      setInteractions(Array.isArray(i)?i:[]);
+      setContacts(Array.isArray(c)?c:[]);
+      setDeals(Array.isArray(d)?d:[]);
+      setLoading(false);
+    });
+  }, [company]);
+
+  const saveInteraction = async (form) => {
+    const body = { user_id:uid, rep_name:repName, company_id:company.id, company_name:company.name, type:form.type, summary:form.summary, outcome:form.outcome||"neutral", next_action:form.next_action||"", next_date:form.next_date||null, value:Number(form.value)||0 };
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/crm_interactions`, { method:"POST", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`,"Content-Type":"application/json","Prefer":"return=representation"}, body:JSON.stringify(body) });
+    const ni = await r.json();
+    if (ni?.[0]) setInteractions(prev=>[ni[0],...prev]);
+    setShowLog(false);
+  };
+
+  const saveDeal = async (form) => {
+    const body = { user_id:uid, rep_name:repName, company_id:company.id, company_name:company.name, title:form.title, value:Number(form.value)||0, stage:form.stage, probability:DEAL_STAGES.find(s=>s.id===form.stage)?.prob||0, notes:form.notes||"", expected_close:form.expected_close||null, updated_at:new Date().toISOString() };
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/crm_deals`, { method:"POST", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`,"Content-Type":"application/json","Prefer":"return=representation"}, body:JSON.stringify(body) });
+    const nd = await r.json();
+    if (nd?.[0]) setDeals(prev=>[nd[0],...prev]);
+    setShowDeal(false);
+  };
+
+  const saveContact = async (form) => {
+    const body = { user_id:uid, company_id:company.id, company_name:company.name, name:form.name, title:form.title||"", phone:form.phone||"", email:form.email||"", notes:form.notes||"", is_dm:form.is_dm||false };
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/crm_contacts`, { method:"POST", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`,"Content-Type":"application/json","Prefer":"return=representation"}, body:JSON.stringify(body) });
+    const nc = await r.json();
+    if (nc?.[0]) setContacts(prev=>[nc[0],...prev]);
+    setShowContact(false);
+  };
+
+  const fmt$ = v => v>=1000000?`$${(v/1000000).toFixed(1)}M`:v>=1000?`$${(v/1000).toFixed(0)}K`:v>0?`$${v}`:"—";
+  const fmtTime = d => { try { return new Date(d).toLocaleDateString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}); } catch { return ""; }};
+
+  return (
+    <>
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:450}} onClick={onClose}/>
+      <div style={{position:"fixed",top:54,right:0,bottom:0,width:360,background:"#0d0d0d",borderLeft:"1px solid #1a1a1a",zIndex:500,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        {/* Header */}
+        <div style={{padding:"14px 16px",borderBottom:"1px solid #1a1a1a",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:16,letterSpacing:2,color:"#e8e8e8",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{company.name}</div>
+            <button onClick={onClose} style={{background:"none",border:"none",color:"#555",fontSize:18,cursor:"pointer",flexShrink:0}}>×</button>
+          </div>
+          <div style={{fontSize:10,color:"#555",marginBottom:10}}>{company.town}, {company.state}</div>
+
+          {/* Quick action buttons */}
+          <div style={{display:"flex",gap:6}}>
+            <button onClick={()=>setShowLog(true)} style={{flex:1,padding:"6px",background:"#1a0a0a",border:"1px solid #cc2222",borderRadius:5,color:"#cc2222",cursor:"pointer",fontSize:10,fontFamily:"monospace",fontWeight:700}}>+ LOG</button>
+            <button onClick={()=>setShowDeal(true)} style={{flex:1,padding:"6px",background:"#111",border:"1px solid #333",borderRadius:5,color:"#888",cursor:"pointer",fontSize:10,fontFamily:"monospace"}}>+ DEAL</button>
+            <button onClick={()=>setShowContact(true)} style={{flex:1,padding:"6px",background:"#111",border:"1px solid #333",borderRadius:5,color:"#888",cursor:"pointer",fontSize:10,fontFamily:"monospace"}}>+ CONTACT</button>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div style={{display:"flex",borderBottom:"1px solid #1a1a1a",flexShrink:0}}>
+          {[["timeline",`Timeline (${interactions.length})`],["contacts",`Contacts (${contacts.length})`],["deals",`Deals (${deals.length})`]].map(([t,label])=>(
+            <button key={t} onClick={()=>setTab(t)}
+              style={{flex:1,padding:"8px 4px",background:"transparent",border:"none",borderBottom:tab===t?"2px solid #cc2222":"2px solid transparent",color:tab===t?"#e8e8e8":"#444",cursor:"pointer",fontSize:10,fontFamily:"monospace",letterSpacing:0.5}}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div style={{flex:1,overflowY:"auto",padding:"12px 16px"}}>
+          {loading ? <div style={{textAlign:"center",padding:30,color:"#444",fontFamily:"monospace",fontSize:11}}>Loading...</div> : (
+            <>
+              {tab === "timeline" && (
+                interactions.length === 0
+                  ? <div style={{textAlign:"center",padding:30,color:"#252525",fontFamily:"monospace",fontSize:11}}>No activity yet.<br/>Tap + LOG to record a call or visit.</div>
+                  : interactions.map((item,i) => {
+                    const itype = INTERACTION_TYPES.find(t=>t.id===item.type)||INTERACTION_TYPES[5];
+                    return (
+                      <div key={item.id} style={{display:"flex",gap:10,marginBottom:12}}>
+                        <div style={{width:28,height:28,borderRadius:"50%",background:"#111",border:`1px solid ${itype.color}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,flexShrink:0}}>{itype.label.split(" ")[0]}</div>
+                        <div style={{flex:1,background:"#111",border:"1px solid #1a1a1a",borderRadius:6,padding:"8px 10px"}}>
+                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                            <span style={{fontSize:9,color:itype.color,fontFamily:"monospace"}}>{itype.label}</span>
+                            <span style={{fontSize:9,color:"#333",fontFamily:"monospace"}}>{fmtTime(item.created_at)}</span>
+                          </div>
+                          <div style={{fontSize:11,color:"#aaa"}}>{item.summary}</div>
+                          {item.next_action&&<div style={{fontSize:10,color:"#e8873a",marginTop:4}}>⏭ {item.next_action}</div>}
+                          {item.value>0&&<div style={{fontSize:10,color:"#4ae87a",marginTop:2}}>{fmt$(item.value)}</div>}
+                        </div>
+                      </div>
+                    );
+                  })
+              )}
+              {tab === "contacts" && (
+                contacts.length === 0
+                  ? <div style={{textAlign:"center",padding:30,color:"#252525",fontFamily:"monospace",fontSize:11}}>No contacts yet.<br/>Tap + CONTACT to add a decision maker.</div>
+                  : contacts.map(c => (
+                    <div key={c.id} style={{background:"#111",border:"1px solid #1a1a1a",borderRadius:6,padding:"10px 12px",marginBottom:8}}>
+                      <div style={{fontSize:12,fontWeight:700,color:"#e8e8e8",marginBottom:2}}>{c.name} {c.is_dm&&<span style={{fontSize:8,padding:"1px 5px",background:"#1a0a0a",border:"1px solid #cc2222",borderRadius:3,color:"#cc2222",fontFamily:"monospace"}}>DM</span>}</div>
+                      <div style={{fontSize:10,color:"#555",marginBottom:6}}>{c.title}</div>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                        {c.phone&&<a href={`tel:${c.phone}`} style={{padding:"4px 8px",background:"#1a1a1a",border:"1px solid #333",borderRadius:4,color:"#e8e8e8",fontSize:10,textDecoration:"none"}}>📞 {c.phone}</a>}
+                        {c.email&&<a href={`mailto:${c.email}`} style={{padding:"4px 8px",background:"#1a1a1a",border:"1px solid #333",borderRadius:4,color:"#4a9eff",fontSize:10,textDecoration:"none"}}>✉</a>}
+                      </div>
+                    </div>
+                  ))
+              )}
+              {tab === "deals" && (
+                deals.length === 0
+                  ? <div style={{textAlign:"center",padding:30,color:"#252525",fontFamily:"monospace",fontSize:11}}>No deals yet.<br/>Tap + DEAL to track an opportunity.</div>
+                  : deals.map(d => {
+                    const stage = DEAL_STAGES.find(s=>s.id===d.stage)||DEAL_STAGES[0];
+                    return (
+                      <div key={d.id} style={{background:"#111",border:`1px solid ${stage.color}22`,borderLeft:`3px solid ${stage.color}`,borderRadius:6,padding:"10px 12px",marginBottom:8}}>
+                        <div style={{fontSize:12,fontWeight:700,color:"#e8e8e8",marginBottom:3}}>{d.title}</div>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <span style={{fontSize:9,padding:"2px 6px",background:`${stage.color}22`,border:`1px solid ${stage.color}`,borderRadius:3,color:stage.color,fontFamily:"monospace"}}>{stage.label}</span>
+                          <span style={{fontSize:12,color:"#4ae87a",fontFamily:"monospace",fontWeight:700}}>{fmt$(d.value)}</span>
+                        </div>
+                      </div>
+                    );
+                  })
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {showLog&&<InteractionModal company={company} companies={[company]} onClose={()=>setShowLog(false)} onSave={saveInteraction}/>}
+      {showDeal&&<DealModal deal={null} companies={[company]} onClose={()=>setShowDeal(false)} onSave={saveDeal}/>}
+      {showContact&&<ContactModal company={company} companies={[company]} onClose={()=>setShowContact(false)} onSave={saveContact}/>}
+    </>
+  );
+}
+
 function TerritoryMap() {
   const [companies, setCompanies]   = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -871,6 +1084,7 @@ function TerritoryMap() {
   const [modal, setModal]           = useState(null);
   const [mapReady, setMapReady]         = useState(false);
   const [followUpTarget, setFollowUpTarget] = useState(null);
+  const [showCRMPanel, setShowCRMPanel] = useState(null);
   const mapDivRef  = useRef(null);
   const leafletRef = useRef(null);
   const cssReadyRef = useRef(false);
@@ -951,7 +1165,7 @@ function TerritoryMap() {
     markerGroup.clearLayers();
 
     const DAY_COLORS = {
-      Monday: "#4a9eff", Tuesday: "#b04ae8", Wednesday: "#4ae8a0", Thursday: "#e8c84a"
+      Monday: "#4a9eff", Tuesday: "#b04ae8", Wednesday: "#4ae8a0", Thursday: "#e8c84a", Friday: "#e8503a"
     };
 
     const filteredWithCoords = companies.filter(c => {
@@ -964,16 +1178,23 @@ function TerritoryMap() {
     });
 
     filteredWithCoords.forEach(c => {
-      const color = DAY_COLORS[c.day] || "#888";
+      const isShared = c._shared === true || c.shared === true;
+      const color = isShared ? "#aaaaaa" : (DAY_COLORS[c.day] || "#888");
       const icon = L.divIcon({
         className: "",
-        iconSize: [20, 28],
-        iconAnchor: [10, 28],
+        iconSize: isShared ? [22, 30] : [20, 28],
+        iconAnchor: isShared ? [11, 30] : [10, 28],
         popupAnchor: [0, -30],
-        html: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="28" viewBox="0 0 20 28">
-          <path d="M10 0C4.5 0 0 4.5 0 10c0 7.5 10 18 10 18S20 17.5 20 10C20 4.5 15.5 0 10 0z" fill="${color}"/>
-          <circle cx="10" cy="10" r="5" fill="#0a0a0a"/>
-        </svg>`,
+        html: isShared
+          ? `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="30" viewBox="0 0 22 30">
+              <path d="M11 0C5 0 0 5 0 11c0 8.25 11 19 11 19S22 19.25 22 11C22 5 17 0 11 0z" fill="#333" stroke="#aaaaaa" stroke-width="1.5"/>
+              <circle cx="11" cy="11" r="5" fill="#aaaaaa" opacity="0.8"/>
+              <text x="11" y="7" text-anchor="middle" font-size="6" fill="#fff" font-family="monospace">🏢</text>
+            </svg>`
+          : `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="28" viewBox="0 0 20 28">
+              <path d="M10 0C4.5 0 0 4.5 0 10c0 7.5 10 18 10 18S20 17.5 20 10C20 4.5 15.5 0 10 0z" fill="${color}"/>
+              <circle cx="10" cy="10" r="5" fill="#0a0a0a"/>
+            </svg>`,
       });
 
       const marker = L.marker([c.lat, c.lng], { icon });
@@ -1019,18 +1240,27 @@ function TerritoryMap() {
     }
     const session = JSON.parse(localStorage.getItem("sb_session") || "{}");
     const token = session.access_token || SUPABASE_KEY;
-    fetch(`${SUPABASE_URL}/rest/v1/companies?select=*&user_id=eq.${getUserId()}&order=id.asc&limit=1000`, {
-      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}` }
-    })
-    .then(r => r.json())
-    .then(data => {
-      if (Array.isArray(data)) {
-        setCompanies(data);
-        localStorage.setItem(cacheKey, JSON.stringify(data));
-      }
+    const uid = getUserId();
+
+    // Load own companies + shared team companies in parallel
+    Promise.all([
+      fetch(`${SUPABASE_URL}/rest/v1/companies?select=*&user_id=eq.${uid}&order=id.asc&limit=1000`, {
+        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}` }
+      }).then(r => r.json()),
+      fetch(`${SUPABASE_URL}/rest/v1/companies?select=*&shared=eq.true&order=id.asc&limit=1000`, {
+        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${token}` }
+      }).then(r => r.json()),
+    ]).then(([own, shared]) => {
+      const ownList = Array.isArray(own) ? own : [];
+      const sharedList = Array.isArray(shared) ? shared : [];
+      // Merge, deduplicate by id, mark shared ones
+      const sharedIds = new Set(ownList.map(c => c.id));
+      const mergedShared = sharedList.filter(c => !sharedIds.has(c.id)).map(c => ({...c, _shared: true}));
+      const all = [...ownList, ...mergedShared];
+      setCompanies(all);
+      localStorage.setItem(cacheKey, JSON.stringify(all));
       setLoading(false);
-    })
-    .catch(() => setLoading(false));
+    }).catch(() => setLoading(false));
   }, []);
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -1057,7 +1287,8 @@ function TerritoryMap() {
       user_id:getUserId(), name:form.name, day:form.day, type:form.type, lat, lng,
       town:form.town, state:form.state, phone:form.phone,
       email:form.email||null, notes:form.notes, priority:form.priority,
-      website:form.website||null, contact:form.contact||null
+      website:form.website||null, contact:form.contact||null,
+      shared: form.shared || false,
     };
     try {
       if (form.id) {
@@ -1167,11 +1398,11 @@ function TerritoryMap() {
                         onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
                         <div style={{display:"flex",alignItems:"center",gap:6}}>
                           <span style={{fontSize:11}}>{TYPE_ICONS[c.type]||"🏗"}</span>
-                          <span style={{fontWeight:600,fontSize:12,color:isSel?dc.color:"#f5f5f5",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</span>
+                          <span style={{fontWeight:600,fontSize:12,color:isSel?dc.color:c._shared?"#aaa":"#f5f5f5",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}{c._shared&&<span style={{fontSize:8,marginLeft:4,color:"#555",fontFamily:"monospace"}}> 🏢SHARED</span>}</span>
                           <div style={{display:"flex",gap:3,flexShrink:0}}>
                             <button onClick={e=>{e.stopPropagation();setFollowUpTarget(c);}} style={{background:"none",border:"1px solid #1a3a1a",borderRadius:3,color:"#3a6a3a",cursor:"pointer",fontSize:9,padding:"1px 5px"}} title="Set follow-up">⏰</button>
-                            <button onClick={e=>{e.stopPropagation();setModal(c);}} style={{background:"none",border:"1px solid #333",borderRadius:3,color:"#555",cursor:"pointer",fontSize:9,padding:"1px 5px"}}>✎</button>
-                            <button onClick={e=>{e.stopPropagation();deleteCompany(c.id);}} style={{background:"none",border:"1px solid #2a1a1a",borderRadius:3,color:"#553333",cursor:"pointer",fontSize:9,padding:"1px 5px"}}>✕</button>
+                            {!c._shared && <button onClick={e=>{e.stopPropagation();setModal(c);}} style={{background:"none",border:"1px solid #333",borderRadius:3,color:"#555",cursor:"pointer",fontSize:9,padding:"1px 5px"}}>✎</button>}
+                            {!c._shared && <button onClick={e=>{e.stopPropagation();deleteCompany(c.id);}} style={{background:"none",border:"1px solid #2a1a1a",borderRadius:3,color:"#553333",cursor:"pointer",fontSize:9,padding:"1px 5px"}}>✕</button>}
                           </div>
                         </div>
                         <div style={{fontSize:10,color:"#555",marginTop:2}}>
@@ -1199,13 +1430,19 @@ function TerritoryMap() {
             })}
           </div>
 
-          <div style={{borderTop:"1px solid #1a1a1a",padding:"8px",display:"flex",gap:10,justifyContent:"center"}}>
+          <div style={{borderTop:"1px solid #1a1a1a",padding:"8px",display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
             {Object.entries(DAY_CONFIG).map(([day,dc])=>(
               <div key={day} style={{textAlign:"center"}}>
-                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,color:dc.color}}>{companies.filter(c=>c.day===day).length}</div>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,color:dc.color}}>{companies.filter(c=>c.day===day&&!c._shared).length}</div>
                 <div style={{fontSize:8,color:dc.border,fontFamily:"monospace",letterSpacing:1}}>{dc.label}</div>
               </div>
             ))}
+            {companies.filter(c=>c._shared).length > 0 && (
+              <div style={{textAlign:"center"}}>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,color:"#aaa"}}>{companies.filter(c=>c._shared).length}</div>
+                <div style={{fontSize:8,color:"#555",fontFamily:"monospace",letterSpacing:1}}>SHARED</div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1223,9 +1460,17 @@ function TerritoryMap() {
                 <div style={{width:8,height:8,borderRadius:"50%",background:dc.color}}/>
                 <span style={{fontSize:10,color:dc.color,fontFamily:"monospace"}}>{dc.label}</span>
                 <span style={{fontSize:9,color:"#444"}}>{dc.desc}</span>
-                <span style={{fontSize:9,color:dc.border,marginLeft:4}}>{companies.filter(c=>c.day===day).length}</span>
+                <span style={{fontSize:9,color:dc.border,marginLeft:4}}>{companies.filter(c=>c.day===day&&!c._shared).length}</span>
               </div>
             ))}
+            {companies.filter(c=>c._shared).length > 0 && (
+              <div style={{display:"flex",alignItems:"center",gap:7,marginTop:4,paddingTop:4,borderTop:"1px solid #1a1a1a"}}>
+                <div style={{width:8,height:8,borderRadius:"50%",background:"#aaa",border:"1px solid #555"}}/>
+                <span style={{fontSize:10,color:"#aaa",fontFamily:"monospace"}}>SHARED</span>
+                <span style={{fontSize:9,color:"#444"}}>Team accounts</span>
+                <span style={{fontSize:9,color:"#555",marginLeft:4}}>{companies.filter(c=>c._shared).length}</span>
+              </div>
+            )}
           </div>
 
           {/* Selected company info card */}
@@ -1239,6 +1484,7 @@ function TerritoryMap() {
               {selected.phone&&<a href={`tel:${selected.phone}`} style={{padding:"8px 14px",background:"#1a1a1a",border:"1px solid #888",borderRadius:6,color:"#e8e8e8",fontWeight:700,fontSize:12,textDecoration:"none"}}>📞 {selected.phone}</a>}
               {selected.lat&&selected.lng&&<a href={`https://waze.com/ul?ll=${selected.lat},${selected.lng}&navigate=yes`} target="_blank" rel="noreferrer" style={{padding:"8px 14px",background:"#05c8f7",borderRadius:6,color:"#000",fontWeight:700,fontSize:12,textDecoration:"none"}}>🚗 Waze</a>}
               {selected.lat&&selected.lng&&<a href={`https://maps.google.com/?q=${selected.lat},${selected.lng}`} target="_blank" rel="noreferrer" style={{padding:"8px 14px",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:"#888",fontSize:12,textDecoration:"none"}}>🗺 Maps</a>}
+              <button onClick={()=>setShowCRMPanel(selected)} style={{padding:"8px 14px",background:"#1a0a0a",border:"1px solid #cc2222",borderRadius:6,color:"#cc2222",cursor:"pointer",fontSize:11,fontWeight:700}}>🤝 CRM</button>
               <button onClick={()=>setModal(selected)} style={{padding:"8px 12px",background:"#1a1a1a",border:"1px solid #444",borderRadius:6,color:"#aaa",cursor:"pointer",fontSize:11}}>✎ Edit</button>
               <button onClick={()=>setSelected(null)} style={{padding:"8px 12px",background:"none",border:"1px solid #2a2a2a",borderRadius:6,color:"#444",cursor:"pointer",fontSize:11}}>✕</button>
             </div>
@@ -1248,6 +1494,7 @@ function TerritoryMap() {
 
       {modal&&<CompanyModal company={modal==="add"?null:modal} onClose={()=>setModal(null)} onSave={saveCompany} saving={saving}/>}
       {followUpTarget&&<FollowUpModal company={followUpTarget} onClose={()=>setFollowUpTarget(null)} onSave={()=>{}}/>}
+      {showCRMPanel&&<MapCRMPanel company={showCRMPanel} onClose={()=>setShowCRMPanel(null)}/>}
     </div>
   );
 }
@@ -4034,7 +4281,7 @@ function AIBidFeed() {
       setFilter("pending");
       await load();
     } catch(e) {
-      alert("Scan failed — check that the Edge Function is deployed. Error: " + e.message);
+      alert("AI Feed not set up yet. To enable automatic scanning, deploy the Edge Function following the EDGE_FUNCTION_SETUP.md guide. Until then you can manually add projects via Import Data.");
     }
     setScanning(false);
   };
@@ -4229,6 +4476,586 @@ function AIBidFeed() {
   );
 }
 
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  CRM  — Contacts + Timeline + Deal Pipeline
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+const DEAL_STAGES = [
+  { id:"cold",      label:"COLD",       color:"#444",    prob:5  },
+  { id:"contacted", label:"CONTACTED",  color:"#4a9eff", prob:20 },
+  { id:"meeting",   label:"MEETING SET",color:"#b04ae8", prob:40 },
+  { id:"quoted",    label:"QUOTED",     color:"#e8c84a", prob:60 },
+  { id:"verbal",    label:"VERBAL",     color:"#e8873a", prob:80 },
+  { id:"won",       label:"WON",        color:"#4ae87a", prob:100},
+  { id:"lost",      label:"LOST",       color:"#cc2222", prob:0  },
+];
+
+const INTERACTION_TYPES = [
+  { id:"call",    label:"📞 Call",    color:"#4a9eff" },
+  { id:"email",   label:"✉ Email",   color:"#b04ae8" },
+  { id:"visit",   label:"📍 Visit",   color:"#4ae87a" },
+  { id:"quote",   label:"📄 Quote",   color:"#e8c84a" },
+  { id:"meeting", label:"🤝 Meeting", color:"#e8873a" },
+  { id:"note",    label:"📝 Note",    color:"#888"    },
+];
+
+function CRM() {
+  const [tab, setTab]             = useState("pipeline"); // pipeline | contacts | activity
+  const [deals, setDeals]         = useState([]);
+  const [contacts, setContacts]   = useState([]);
+  const [interactions, setInteractions] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [isManager, setIsManager] = useState(false);
+  const [filterRep, setFilterRep] = useState("All");
+
+  // Modals
+  const [showDealModal, setShowDealModal]         = useState(false);
+  const [showContactModal, setShowContactModal]   = useState(false);
+  const [showInteractionModal, setShowInteractionModal] = useState(false);
+  const [selectedCompany, setSelectedCompany]     = useState(null);
+  const [editDeal, setEditDeal]                   = useState(null);
+
+  const token = JSON.parse(localStorage.getItem("sb_session")||"{}").access_token || SUPABASE_KEY;
+  const uid = getUserId();
+
+  let repName = "Rep";
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    repName = payload.user_metadata?.full_name || payload.email?.split("@")[0] || "Rep";
+  } catch {}
+
+  // ── Load data ───────────────────────────────────────────────
+  const load = async () => {
+    try {
+      // Check manager
+      const mr = await fetch(`${SUPABASE_URL}/rest/v1/user_settings?user_id=eq.${uid}&key=eq.role&select=value`, {
+        headers: {"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`}
+      }).then(r=>r.json());
+      const mgr = mr?.[0]?.value === "manager";
+      setIsManager(mgr);
+
+      const suffix = mgr ? "" : `?user_id=eq.${uid}`;
+      const [d, c, i, co] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/crm_deals${suffix}&order=updated_at.desc&limit=200`, {
+          headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`}
+        }).then(r=>r.json()),
+        fetch(`${SUPABASE_URL}/rest/v1/crm_contacts${suffix}&order=created_at.desc&limit=500`, {
+          headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`}
+        }).then(r=>r.json()),
+        fetch(`${SUPABASE_URL}/rest/v1/crm_interactions${suffix}&order=created_at.desc&limit=500`, {
+          headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`}
+        }).then(r=>r.json()),
+        fetch(`${SUPABASE_URL}/rest/v1/companies?user_id=eq.${uid}&select=id,name,town,day&order=name.asc&limit=500`, {
+          headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`}
+        }).then(r=>r.json()),
+      ]);
+      setDeals(Array.isArray(d)?d:[]);
+      setContacts(Array.isArray(c)?c:[]);
+      setInteractions(Array.isArray(i)?i:[]);
+      setCompanies(Array.isArray(co)?co:[]);
+    } catch(e) { console.error(e); }
+    setLoading(false);
+  };
+
+  useEffect(()=>{ load(); },[]);
+
+  // ── Save deal ───────────────────────────────────────────────
+  const saveDeal = async (form) => {
+    const body = { user_id:uid, rep_name:repName, company_id:form.company_id||null, company_name:form.company_name, title:form.title, value:Number(form.value)||0, stage:form.stage, probability:DEAL_STAGES.find(s=>s.id===form.stage)?.prob||0, notes:form.notes||"", expected_close:form.expected_close||null, updated_at:new Date().toISOString() };
+    if (form.id) {
+      await fetch(`${SUPABASE_URL}/rest/v1/crm_deals?id=eq.${form.id}`, { method:"PATCH", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`,"Content-Type":"application/json","Prefer":"return=minimal"}, body:JSON.stringify(body) });
+      setDeals(prev=>prev.map(d=>d.id===form.id?{...d,...body,id:form.id}:d));
+    } else {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/crm_deals`, { method:"POST", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`,"Content-Type":"application/json","Prefer":"return=representation"}, body:JSON.stringify(body) });
+      const nd = await r.json();
+      if (nd?.[0]) setDeals(prev=>[nd[0],...prev]);
+    }
+    setShowDealModal(false); setEditDeal(null);
+  };
+
+  // ── Save contact ────────────────────────────────────────────
+  const saveContact = async (form) => {
+    const body = { user_id:uid, company_id:form.company_id||null, company_name:form.company_name, name:form.name, title:form.title||"", phone:form.phone||"", email:form.email||"", notes:form.notes||"", is_dm:form.is_dm||false };
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/crm_contacts`, { method:"POST", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`,"Content-Type":"application/json","Prefer":"return=representation"}, body:JSON.stringify(body) });
+    const nc = await r.json();
+    if (nc?.[0]) setContacts(prev=>[nc[0],...prev]);
+    setShowContactModal(false);
+  };
+
+  // ── Save interaction ────────────────────────────────────────
+  const saveInteraction = async (form) => {
+    const body = { user_id:uid, rep_name:repName, company_id:form.company_id||null, company_name:form.company_name, type:form.type, summary:form.summary, outcome:form.outcome||"neutral", next_action:form.next_action||"", next_date:form.next_date||null, value:Number(form.value)||0 };
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/crm_interactions`, { method:"POST", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`,"Content-Type":"application/json","Prefer":"return=representation"}, body:JSON.stringify(body) });
+    const ni = await r.json();
+    if (ni?.[0]) setInteractions(prev=>[ni[0],...prev]);
+    setShowInteractionModal(false);
+  };
+
+  // ── Move deal stage ─────────────────────────────────────────
+  const moveDeal = async (dealId, newStage) => {
+    const prob = DEAL_STAGES.find(s=>s.id===newStage)?.prob||0;
+    await fetch(`${SUPABASE_URL}/rest/v1/crm_deals?id=eq.${dealId}`, { method:"PATCH", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`,"Content-Type":"application/json","Prefer":"return=minimal"}, body:JSON.stringify({stage:newStage,probability:prob,updated_at:new Date().toISOString()}) });
+    setDeals(prev=>prev.map(d=>d.id===dealId?{...d,stage:newStage,probability:prob}:d));
+  };
+
+  // ── Delete deal ─────────────────────────────────────────────
+  const deleteDeal = async (id) => {
+    if (!confirm("Delete this deal?")) return;
+    await fetch(`${SUPABASE_URL}/rest/v1/crm_deals?id=eq.${id}`, { method:"DELETE", headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`} });
+    setDeals(prev=>prev.filter(d=>d.id!==id));
+  };
+
+  const fmt$ = v => v>=1000000?`$${(v/1000000).toFixed(1)}M`:v>=1000?`$${(v/1000).toFixed(0)}K`:v>0?`$${v}`:"—";
+  const fmtDate = d => { try { return new Date(d).toLocaleDateString("en-US",{month:"short",day:"numeric"}); } catch { return ""; }};
+  const fmtTime = d => { try { return new Date(d).toLocaleTimeString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}); } catch { return ""; }};
+
+  const repList = ["All",...new Set([...deals,...interactions].map(x=>x.rep_name).filter(Boolean))];
+  const filteredDeals = isManager && filterRep!=="All" ? deals.filter(d=>d.rep_name===filterRep) : deals;
+  const filteredInteractions = isManager && filterRep!=="All" ? interactions.filter(i=>i.rep_name===filterRep) : interactions;
+
+  // Pipeline totals
+  const pipelineValue = filteredDeals.filter(d=>!["won","lost"].includes(d.stage)).reduce((s,d)=>s+(d.value||0),0);
+  const wonValue = filteredDeals.filter(d=>d.stage==="won").reduce((s,d)=>s+(d.value||0),0);
+  const weightedValue = filteredDeals.filter(d=>!["won","lost"].includes(d.stage)).reduce((s,d)=>s+(d.value||0)*((d.probability||0)/100),0);
+
+  if (loading) return (
+    <div style={{height:"calc(100vh-54px)",background:"#0a0a0a",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{color:"#e8e8e8",fontFamily:"'Bebas Neue',sans-serif",fontSize:24,letterSpacing:3}}>LOADING CRM...</div>
+    </div>
+  );
+
+  return (
+    <div style={{background:"#0a0a0a",color:"#f5f5f5",fontFamily:"'DM Sans',sans-serif",minHeight:"calc(100vh - 54px)"}}>
+
+      {/* Header */}
+      <div style={{background:"#0d0d0d",borderBottom:"1px solid #1a1a1a",padding:"10px 24px",display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,letterSpacing:3,color:"#e8e8e8"}}>CRM</div>
+
+        {/* Tabs */}
+        <div style={{display:"flex",gap:0,background:"#111",border:"1px solid #1a1a1a",borderRadius:6,overflow:"hidden"}}>
+          {[["pipeline","🏗 Pipeline"],["contacts","👤 Contacts"],["activity","📋 Activity"]].map(([t,label])=>(
+            <button key={t} onClick={()=>setTab(t)}
+              style={{padding:"6px 16px",background:tab===t?"#1a1a1a":"transparent",border:"none",borderRight:"1px solid #1a1a1a",color:tab===t?"#e8e8e8":"#444",cursor:"pointer",fontSize:11,fontFamily:"monospace",letterSpacing:1}}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Manager filter */}
+        {isManager && (
+          <select value={filterRep} onChange={e=>setFilterRep(e.target.value)}
+            style={{background:"#111",border:"1px solid #222",borderRadius:5,color:"#888",fontSize:11,padding:"6px 10px",fontFamily:"monospace",outline:"none"}}>
+            {repList.map(r=><option key={r} value={r}>{r}</option>)}
+          </select>
+        )}
+
+        <div style={{marginLeft:"auto",display:"flex",gap:8}}>
+          <button onClick={()=>setShowInteractionModal(true)}
+            style={{padding:"7px 14px",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:"#888",cursor:"pointer",fontSize:11,fontFamily:"monospace"}}>
+            + LOG ACTIVITY
+          </button>
+          <button onClick={()=>setShowContactModal(true)}
+            style={{padding:"7px 14px",background:"#1a1a1a",border:"1px solid #333",borderRadius:6,color:"#888",cursor:"pointer",fontSize:11,fontFamily:"monospace"}}>
+            + ADD CONTACT
+          </button>
+          <button onClick={()=>{ setEditDeal(null); setShowDealModal(true); }}
+            style={{padding:"7px 14px",background:"#cc2222",border:"none",borderRadius:6,color:"#fff",cursor:"pointer",fontSize:11,fontFamily:"monospace",fontWeight:700}}>
+            + NEW DEAL
+          </button>
+        </div>
+      </div>
+
+      {/* ── PIPELINE TAB ── */}
+      {tab === "pipeline" && (
+        <div style={{padding:"16px 24px"}}>
+          {/* Stats */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:20}}>
+            {[
+              ["PIPELINE",fmt$(pipelineValue),"#4a9eff"],
+              ["WEIGHTED",fmt$(weightedValue),"#e8c84a"],
+              ["WON",fmt$(wonValue),"#4ae87a"],
+              ["ACTIVE DEALS",filteredDeals.filter(d=>!["won","lost"].includes(d.stage)).length,"#e8e8e8"],
+            ].map(([label,val,color])=>(
+              <div key={label} style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:8,padding:"12px 16px"}}>
+                <div style={{fontSize:8,color:"#444",fontFamily:"monospace",letterSpacing:2,marginBottom:4}}>{label}</div>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:24,color,lineHeight:1}}>{val}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Kanban board */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:8,overflowX:"auto"}}>
+            {DEAL_STAGES.map(stage => {
+              const stageDeals = filteredDeals.filter(d=>d.stage===stage.id);
+              const stageValue = stageDeals.reduce((s,d)=>s+(d.value||0),0);
+              return (
+                <div key={stage.id} style={{background:"#0d0d0d",border:`1px solid ${stage.color}22`,borderTop:`2px solid ${stage.color}`,borderRadius:6,minWidth:160,minHeight:200}}>
+                  {/* Column header */}
+                  <div style={{padding:"8px 10px",borderBottom:"1px solid #1a1a1a"}}>
+                    <div style={{fontSize:9,fontFamily:"monospace",letterSpacing:1,color:stage.color,fontWeight:700}}>{stage.label}</div>
+                    <div style={{display:"flex",justifyContent:"space-between",marginTop:2}}>
+                      <span style={{fontSize:9,color:"#444",fontFamily:"monospace"}}>{stageDeals.length} deals</span>
+                      <span style={{fontSize:9,color:"#555",fontFamily:"monospace"}}>{fmt$(stageValue)}</span>
+                    </div>
+                  </div>
+
+                  {/* Deal cards */}
+                  <div style={{padding:"6px",display:"flex",flexDirection:"column",gap:5}}>
+                    {stageDeals.map(deal => (
+                      <div key={deal.id}
+                        style={{background:"#111",border:"1px solid #1a1a1a",borderRadius:5,padding:"8px 9px",cursor:"pointer"}}
+                        onClick={()=>{ setEditDeal(deal); setShowDealModal(true); }}>
+                        <div style={{fontSize:11,fontWeight:600,color:"#e8e8e8",marginBottom:3,lineHeight:1.3}}>{deal.company_name}</div>
+                        <div style={{fontSize:10,color:"#555",marginBottom:4}}>{deal.title}</div>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <span style={{fontSize:10,color:stage.color,fontFamily:"monospace",fontWeight:700}}>{fmt$(deal.value)}</span>
+                          <div style={{display:"flex",gap:4}}>
+                            {/* Move left */}
+                            {DEAL_STAGES.findIndex(s=>s.id===stage.id) > 0 && (
+                              <button onClick={e=>{e.stopPropagation();moveDeal(deal.id,DEAL_STAGES[DEAL_STAGES.findIndex(s=>s.id===stage.id)-1].id);}}
+                                style={{background:"none",border:"1px solid #222",borderRadius:3,color:"#444",cursor:"pointer",fontSize:9,padding:"1px 4px"}}>‹</button>
+                            )}
+                            {/* Move right */}
+                            {DEAL_STAGES.findIndex(s=>s.id===stage.id) < DEAL_STAGES.length-1 && (
+                              <button onClick={e=>{e.stopPropagation();moveDeal(deal.id,DEAL_STAGES[DEAL_STAGES.findIndex(s=>s.id===stage.id)+1].id);}}
+                                style={{background:"none",border:"1px solid #222",borderRadius:3,color:"#444",cursor:"pointer",fontSize:9,padding:"1px 4px"}}>›</button>
+                            )}
+                            <button onClick={e=>{e.stopPropagation();deleteDeal(deal.id);}}
+                              style={{background:"none",border:"1px solid #2a1a1a",borderRadius:3,color:"#553333",cursor:"pointer",fontSize:9,padding:"1px 4px"}}>✕</button>
+                          </div>
+                        </div>
+                        {isManager && deal.rep_name && (
+                          <div style={{fontSize:8,color:"#cc2222",fontFamily:"monospace",marginTop:3}}>{deal.rep_name}</div>
+                        )}
+                      </div>
+                    ))}
+                    {stageDeals.length === 0 && (
+                      <div style={{padding:"16px 8px",textAlign:"center",fontSize:9,color:"#222",fontFamily:"monospace"}}>empty</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── CONTACTS TAB ── */}
+      {tab === "contacts" && (
+        <div style={{padding:"16px 24px"}}>
+          {contacts.length === 0 ? (
+            <div style={{textAlign:"center",padding:60,color:"#252525",fontFamily:"monospace",fontSize:12}}>
+              No contacts yet. Tap + ADD CONTACT to add decision makers.
+            </div>
+          ) : (
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>
+              {contacts.map(c => (
+                <div key={c.id} style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:8,padding:"14px 16px"}}>
+                  <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
+                    <div style={{width:36,height:36,borderRadius:"50%",background:"#1a1a1a",border:"1px solid #333",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <span style={{fontSize:14}}>👤</span>
+                    </div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:700,color:"#e8e8e8"}}>{c.name} {c.is_dm&&<span style={{fontSize:8,padding:"1px 5px",background:"#1a0a0a",border:"1px solid #cc2222",borderRadius:3,color:"#cc2222",fontFamily:"monospace"}}>DM</span>}</div>
+                      <div style={{fontSize:11,color:"#666"}}>{c.title}</div>
+                      <div style={{fontSize:11,color:"#555"}}>{c.company_name}</div>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {c.phone&&<a href={`tel:${c.phone}`} style={{padding:"5px 10px",background:"#1a1a1a",border:"1px solid #333",borderRadius:4,color:"#e8e8e8",fontSize:10,textDecoration:"none"}}>📞 {c.phone}</a>}
+                    {c.email&&<a href={`mailto:${c.email}`} style={{padding:"5px 10px",background:"#1a1a1a",border:"1px solid #333",borderRadius:4,color:"#4a9eff",fontSize:10,textDecoration:"none"}}>✉ Email</a>}
+                  </div>
+                  {c.notes&&<div style={{fontSize:10,color:"#444",marginTop:8,lineHeight:1.5}}>{c.notes}</div>}
+                  {isManager&&c.rep_name&&<div style={{fontSize:8,color:"#cc2222",fontFamily:"monospace",marginTop:6}}>{c.rep_name}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── ACTIVITY TAB ── */}
+      {tab === "activity" && (
+        <div style={{padding:"16px 24px",maxWidth:800,margin:"0 auto"}}>
+          {filteredInteractions.length === 0 ? (
+            <div style={{textAlign:"center",padding:60,color:"#252525",fontFamily:"monospace",fontSize:12}}>
+              No activity logged yet. Tap + LOG ACTIVITY to record calls, emails, and visits.
+            </div>
+          ) : (
+            <div style={{display:"flex",flexDirection:"column",gap:0}}>
+              {filteredInteractions.map((item,i) => {
+                const itype = INTERACTION_TYPES.find(t=>t.id===item.type)||INTERACTION_TYPES[5];
+                const OUTCOME_COLOR = {positive:"#4ae87a",neutral:"#888",negative:"#cc2222"};
+                return (
+                  <div key={item.id} style={{display:"flex",gap:12,paddingBottom:16}}>
+                    {/* Timeline line */}
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0}}>
+                      <div style={{width:32,height:32,borderRadius:"50%",background:"#111",border:`2px solid ${itype.color}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0}}>
+                        {itype.label.split(" ")[0]}
+                      </div>
+                      {i < filteredInteractions.length-1 && <div style={{width:1,flex:1,background:"#1a1a1a",minHeight:20,marginTop:4}}/>}
+                    </div>
+                    {/* Content */}
+                    <div style={{flex:1,background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:8,padding:"10px 14px",marginBottom:4}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
+                        <span style={{fontSize:11,fontWeight:700,color:"#e8e8e8"}}>{item.company_name}</span>
+                        <span style={{fontSize:9,padding:"1px 6px",background:"#111",border:`1px solid ${itype.color}`,borderRadius:3,color:itype.color,fontFamily:"monospace"}}>{itype.label}</span>
+                        {item.outcome&&<span style={{fontSize:9,color:OUTCOME_COLOR[item.outcome]||"#888",fontFamily:"monospace"}}>{item.outcome.toUpperCase()}</span>}
+                        {item.value>0&&<span style={{fontSize:10,color:"#4ae87a",fontFamily:"monospace",fontWeight:700}}>{fmt$(item.value)}</span>}
+                        <span style={{marginLeft:"auto",fontSize:9,color:"#333",fontFamily:"monospace"}}>{fmtTime(item.created_at)}</span>
+                      </div>
+                      <div style={{fontSize:12,color:"#888",marginBottom:item.next_action?6:0}}>{item.summary}</div>
+                      {item.next_action&&(
+                        <div style={{fontSize:10,color:"#e8873a",fontFamily:"monospace"}}>
+                          ⏭ {item.next_action}{item.next_date?` · ${fmtDate(item.next_date)}`:""}
+                        </div>
+                      )}
+                      {isManager&&item.rep_name&&<div style={{fontSize:8,color:"#cc2222",fontFamily:"monospace",marginTop:4}}>{item.rep_name}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── DEAL MODAL ── */}
+      {showDealModal && (
+        <DealModal
+          deal={editDeal}
+          companies={companies}
+          onClose={()=>{ setShowDealModal(false); setEditDeal(null); }}
+          onSave={saveDeal}
+        />
+      )}
+
+      {/* ── CONTACT MODAL ── */}
+      {showContactModal && (
+        <ContactModal
+          company={selectedCompany}
+          companies={companies}
+          onClose={()=>{ setShowContactModal(false); setSelectedCompany(null); }}
+          onSave={saveContact}
+        />
+      )}
+
+      {/* ── INTERACTION MODAL ── */}
+      {showInteractionModal && (
+        <InteractionModal
+          company={selectedCompany}
+          companies={companies}
+          onClose={()=>{ setShowInteractionModal(false); setSelectedCompany(null); }}
+          onSave={saveInteraction}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Deal Modal ────────────────────────────────────────────────
+function DealModal({ deal, companies, onClose, onSave }) {
+  const [form, setForm] = useState(deal || { company_id:"", company_name:"", title:"Equipment Rental Opportunity", value:"", stage:"cold", notes:"", expected_close:"" });
+  const set = (k,v) => setForm(f=>({...f,[k]:v}));
+  const stage = DEAL_STAGES.find(s=>s.id===form.stage)||DEAL_STAGES[0];
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{background:"#0d0d0d",border:`1px solid ${stage.color}`,borderRadius:12,width:"100%",maxWidth:480,padding:28,maxHeight:"90vh",overflowY:"auto"}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,letterSpacing:3,color:"#e8e8e8",marginBottom:20}}>{deal?"EDIT DEAL":"NEW DEAL"}</div>
+
+        <div style={{display:"grid",gap:12}}>
+          <div>
+            <label style={{fontSize:9,color:"#555",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4}}>COMPANY</label>
+            <select value={form.company_id} onChange={e=>{const c=companies.find(x=>x.id===e.target.value);set("company_id",e.target.value);if(c)set("company_name",c.name);}}
+              style={{width:"100%",background:"#111",border:"1px solid #222",borderRadius:5,color:"#e8e8e8",padding:"8px 10px",fontSize:12,outline:"none"}}>
+              <option value="">Select company...</option>
+              {companies.map(c=><option key={c.id} value={c.id}>{c.name} — {c.town}</option>)}
+            </select>
+            {!form.company_id&&<input value={form.company_name} onChange={e=>set("company_name",e.target.value)} placeholder="Or type company name..."
+              style={{width:"100%",background:"#111",border:"1px solid #222",borderRadius:5,color:"#888",padding:"7px 10px",fontSize:12,outline:"none",marginTop:4,boxSizing:"border-box"}}/>}
+          </div>
+
+          <div>
+            <label style={{fontSize:9,color:"#555",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4}}>DEAL TITLE</label>
+            <input value={form.title} onChange={e=>set("title",e.target.value)}
+              style={{width:"100%",background:"#111",border:"1px solid #222",borderRadius:5,color:"#e8e8e8",padding:"8px 10px",fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div>
+              <label style={{fontSize:9,color:"#555",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4}}>VALUE ($)</label>
+              <input type="number" value={form.value} onChange={e=>set("value",e.target.value)} placeholder="0"
+                style={{width:"100%",background:"#111",border:"1px solid #222",borderRadius:5,color:"#4ae87a",padding:"8px 10px",fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+            </div>
+            <div>
+              <label style={{fontSize:9,color:"#555",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4}}>EXPECTED CLOSE</label>
+              <input type="date" value={form.expected_close||""} onChange={e=>set("expected_close",e.target.value)}
+                style={{width:"100%",background:"#111",border:"1px solid #222",borderRadius:5,color:"#888",padding:"8px 10px",fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+            </div>
+          </div>
+
+          <div>
+            <label style={{fontSize:9,color:"#555",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:6}}>STAGE</label>
+            <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+              {DEAL_STAGES.map(s=>(
+                <button key={s.id} onClick={()=>set("stage",s.id)}
+                  style={{padding:"5px 10px",background:form.stage===s.id?`${s.color}22`:"#111",border:`1px solid ${form.stage===s.id?s.color:"#222"}`,borderRadius:4,color:form.stage===s.id?s.color:"#444",cursor:"pointer",fontSize:9,fontFamily:"monospace",fontWeight:700}}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label style={{fontSize:9,color:"#555",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4}}>NOTES</label>
+            <textarea value={form.notes} onChange={e=>set("notes",e.target.value)} rows={3}
+              style={{width:"100%",background:"#111",border:"1px solid #222",borderRadius:5,color:"#888",padding:"8px 10px",fontSize:12,outline:"none",resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
+          </div>
+        </div>
+
+        <div style={{display:"flex",gap:10,marginTop:20}}>
+          <button onClick={onClose} style={{flex:1,padding:"10px",background:"none",border:"1px solid #222",borderRadius:6,color:"#555",cursor:"pointer",fontSize:12}}>Cancel</button>
+          <button onClick={()=>onSave(form)} disabled={!form.company_name}
+            style={{flex:2,padding:"10px",background:form.company_name?"#cc2222":"#1a1a1a",border:"none",borderRadius:6,color:form.company_name?"#fff":"#444",cursor:form.company_name?"pointer":"default",fontSize:12,fontWeight:700}}>
+            {deal?"Save Changes":"Create Deal"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Contact Modal ─────────────────────────────────────────────
+function ContactModal({ company, companies, onClose, onSave }) {
+  const [form, setForm] = useState({ company_id:company?.id||"", company_name:company?.name||"", name:"", title:"", phone:"", email:"", notes:"", is_dm:false });
+  const set = (k,v) => setForm(f=>({...f,[k]:v}));
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{background:"#0d0d0d",border:"1px solid #333",borderRadius:12,width:"100%",maxWidth:420,padding:28}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,letterSpacing:3,color:"#e8e8e8",marginBottom:20}}>ADD CONTACT</div>
+        <div style={{display:"grid",gap:12}}>
+          <div>
+            <label style={{fontSize:9,color:"#555",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4}}>COMPANY</label>
+            <select value={form.company_id} onChange={e=>{const c=companies.find(x=>x.id===e.target.value);set("company_id",e.target.value);if(c)set("company_name",c.name);}}
+              style={{width:"100%",background:"#111",border:"1px solid #222",borderRadius:5,color:"#e8e8e8",padding:"8px 10px",fontSize:12,outline:"none"}}>
+              <option value="">Select company...</option>
+              {companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          {[["CONTACT NAME","name"],["JOB TITLE","title"],["PHONE","phone"],["EMAIL","email"]].map(([label,key])=>(
+            <div key={key}>
+              <label style={{fontSize:9,color:"#555",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4}}>{label}</label>
+              <input value={form[key]} onChange={e=>set(key,e.target.value)}
+                style={{width:"100%",background:"#111",border:"1px solid #222",borderRadius:5,color:"#e8e8e8",padding:"8px 10px",fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+            </div>
+          ))}
+          <div>
+            <label style={{fontSize:9,color:"#555",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4}}>NOTES</label>
+            <textarea value={form.notes} onChange={e=>set("notes",e.target.value)} rows={2}
+              style={{width:"100%",background:"#111",border:"1px solid #222",borderRadius:5,color:"#888",padding:"8px 10px",fontSize:12,outline:"none",resize:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+          </div>
+          <button onClick={()=>set("is_dm",!form.is_dm)}
+            style={{padding:"8px 14px",background:form.is_dm?"#1a0a0a":"#111",border:`1px solid ${form.is_dm?"#cc2222":"#222"}`,borderRadius:5,color:form.is_dm?"#cc2222":"#555",cursor:"pointer",fontSize:11,fontFamily:"monospace",fontWeight:700,textAlign:"left"}}>
+            {form.is_dm?"✓ DECISION MAKER":"Mark as Decision Maker"}
+          </button>
+        </div>
+        <div style={{display:"flex",gap:10,marginTop:20}}>
+          <button onClick={onClose} style={{flex:1,padding:"10px",background:"none",border:"1px solid #222",borderRadius:6,color:"#555",cursor:"pointer",fontSize:12}}>Cancel</button>
+          <button onClick={()=>onSave(form)} disabled={!form.name}
+            style={{flex:2,padding:"10px",background:form.name?"#cc2222":"#1a1a1a",border:"none",borderRadius:6,color:form.name?"#fff":"#444",cursor:form.name?"pointer":"default",fontSize:12,fontWeight:700}}>
+            Save Contact
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Interaction Modal ─────────────────────────────────────────
+function InteractionModal({ company, companies, onClose, onSave }) {
+  const [form, setForm] = useState({ company_id:company?.id||"", company_name:company?.name||"", type:"call", summary:"", outcome:"neutral", next_action:"", next_date:"", value:"" });
+  const set = (k,v) => setForm(f=>({...f,[k]:v}));
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.88)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+      <div style={{background:"#0d0d0d",border:"1px solid #333",borderRadius:12,width:"100%",maxWidth:440,padding:28,maxHeight:"90vh",overflowY:"auto"}}>
+        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,letterSpacing:3,color:"#e8e8e8",marginBottom:20}}>LOG ACTIVITY</div>
+        <div style={{display:"grid",gap:12}}>
+          <div>
+            <label style={{fontSize:9,color:"#555",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4}}>COMPANY</label>
+            <select value={form.company_id} onChange={e=>{const c=companies.find(x=>x.id===e.target.value);set("company_id",e.target.value);if(c)set("company_name",c.name);}}
+              style={{width:"100%",background:"#111",border:"1px solid #222",borderRadius:5,color:"#e8e8e8",padding:"8px 10px",fontSize:12,outline:"none"}}>
+              <option value="">Select company...</option>
+              {companies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label style={{fontSize:9,color:"#555",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:6}}>TYPE</label>
+            <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+              {INTERACTION_TYPES.map(t=>(
+                <button key={t.id} onClick={()=>set("type",t.id)}
+                  style={{padding:"5px 10px",background:form.type===t.id?`${t.color}22`:"#111",border:`1px solid ${form.type===t.id?t.color:"#222"}`,borderRadius:4,color:form.type===t.id?t.color:"#444",cursor:"pointer",fontSize:10,fontFamily:"monospace"}}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label style={{fontSize:9,color:"#555",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4}}>WHAT HAPPENED</label>
+            <textarea value={form.summary} onChange={e=>set("summary",e.target.value)} rows={3} placeholder="e.g. Spoke with Mike, interested in excavator rental for Route 44 project..."
+              style={{width:"100%",background:"#111",border:"1px solid #222",borderRadius:5,color:"#e8e8e8",padding:"8px 10px",fontSize:12,outline:"none",resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
+          </div>
+
+          <div>
+            <label style={{fontSize:9,color:"#555",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:6}}>OUTCOME</label>
+            <div style={{display:"flex",gap:6}}>
+              {[["positive","✓ Positive","#4ae87a"],["neutral","— Neutral","#888"],["negative","✗ Negative","#cc2222"]].map(([val,label,color])=>(
+                <button key={val} onClick={()=>set("outcome",val)}
+                  style={{flex:1,padding:"7px",background:form.outcome===val?`${color}22`:"#111",border:`1px solid ${form.outcome===val?color:"#222"}`,borderRadius:4,color:form.outcome===val?color:"#444",cursor:"pointer",fontSize:10,fontFamily:"monospace"}}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div>
+              <label style={{fontSize:9,color:"#555",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4}}>QUOTE VALUE ($)</label>
+              <input type="number" value={form.value} onChange={e=>set("value",e.target.value)} placeholder="0"
+                style={{width:"100%",background:"#111",border:"1px solid #222",borderRadius:5,color:"#4ae87a",padding:"8px 10px",fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+            </div>
+            <div>
+              <label style={{fontSize:9,color:"#555",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4}}>NEXT ACTION DATE</label>
+              <input type="date" value={form.next_date} onChange={e=>set("next_date",e.target.value)}
+                style={{width:"100%",background:"#111",border:"1px solid #222",borderRadius:5,color:"#888",padding:"8px 10px",fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+            </div>
+          </div>
+
+          <div>
+            <label style={{fontSize:9,color:"#555",fontFamily:"monospace",letterSpacing:1,display:"block",marginBottom:4}}>NEXT ACTION</label>
+            <input value={form.next_action} onChange={e=>set("next_action",e.target.value)} placeholder="e.g. Send proposal, Follow up call, Schedule site visit..."
+              style={{width:"100%",background:"#111",border:"1px solid #222",borderRadius:5,color:"#e8e8e8",padding:"8px 10px",fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+          </div>
+        </div>
+
+        <div style={{display:"flex",gap:10,marginTop:20}}>
+          <button onClick={onClose} style={{flex:1,padding:"10px",background:"none",border:"1px solid #222",borderRadius:6,color:"#555",cursor:"pointer",fontSize:12}}>Cancel</button>
+          <button onClick={()=>onSave(form)} disabled={!form.company_name||!form.summary}
+            style={{flex:2,padding:"10px",background:form.company_name&&form.summary?"#cc2222":"#1a1a1a",border:"none",borderRadius:6,color:form.company_name&&form.summary?"#fff":"#444",cursor:form.company_name&&form.summary?"pointer":"default",fontSize:12,fontWeight:700}}>
+            Log Activity
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState("bids");
   const [session, setSession] = useState(() => getSession());
@@ -4244,10 +5071,28 @@ export default function App() {
   const [showNearby, setShowNearby]     = useState(false);
   const isOnline = useOnlineStatus();
 
-  // Listen for auth state
+  // Listen for auth state — runs on mount and handles Google redirect
   useEffect(() => {
     const s = getSession();
-    setSession(s);
+    if (s?.access_token) {
+      // Save timestamp for expiry checking
+      if (!localStorage.getItem("sb_session_saved_at")) {
+        localStorage.setItem("sb_session_saved_at", Date.now().toString());
+      }
+      setSession(s);
+    } else {
+      setSession(null);
+    }
+
+    // Also listen for storage changes (multi-tab support)
+    const onStorage = (e) => {
+      if (e.key === "sb_session") {
+        const updated = e.newValue ? JSON.parse(e.newValue) : null;
+        setSession(updated);
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   // Check onboarding status — only when logged in
@@ -4359,6 +5204,7 @@ export default function App() {
     { id: "mileage",   label: "MILEAGE",          icon: "🚗" },
     { id: "leaderboard", label: "LEADERBOARD",    icon: "🏆" },
     { id: "feed",        label: "AI BID FEED",      icon: "📡" },
+    { id: "crm",         label: "CRM",              icon: "🤝" },
   ];
 
   return (
@@ -4503,6 +5349,7 @@ export default function App() {
       {view === "mileage" && <MileageTracker />}
       {view === "leaderboard" && <RepLeaderboard />}
       {view === "feed" && <AIBidFeed />}
+      {view === "crm" && <CRM />}
 
       {/* ── Global modals (available from any view) ── */}
       {showProposal && <ProposalBuilder onClose={()=>setShowProposal(false)} />}
