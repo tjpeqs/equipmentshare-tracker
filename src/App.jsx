@@ -937,16 +937,53 @@ function MapCRMPanel({ company, onClose }) {
   useEffect(() => {
     if (!company) return;
     const q = `company_id=eq.${company.id}`;
+    const uid2 = getUserId();
     Promise.all([
+      // CRM manual interactions
       fetch(`${SUPABASE_URL}/rest/v1/crm_interactions?${q}&order=created_at.desc&limit=50`, { headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`} }).then(r=>r.json()),
+      // Existing check-ins for this company
+      fetch(`${SUPABASE_URL}/rest/v1/check_ins?company_id=eq.${company.id}&user_id=eq.${uid2}&order=checked_in_at.desc&limit=20`, { headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`} }).then(r=>r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/crm_contacts?${q}&order=created_at.desc&limit=20`, { headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`} }).then(r=>r.json()),
       fetch(`${SUPABASE_URL}/rest/v1/crm_deals?${q}&order=updated_at.desc&limit=10`, { headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`} }).then(r=>r.json()),
-    ]).then(([i,c,d]) => {
-      setInteractions(Array.isArray(i)?i:[]);
+      // Follow-up reminders for this company
+      fetch(`${SUPABASE_URL}/rest/v1/user_settings?user_id=eq.${uid2}&key=eq.followup_${company.id}&select=value`, { headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`} }).then(r=>r.json()),
+    ]).then(([crmI, checkIns, c, d, followup]) => {
+      // Convert check-ins to interaction format
+      const checkInItems = (Array.isArray(checkIns)?checkIns:[]).map(ci => ({
+        id: `ci_${ci.id}`,
+        type: "visit",
+        summary: `GPS Check-In${ci.status==="verified"?" ✓ Verified":ci.status==="out_of_range"?" ⚠ Far from site":""} · ${ci.notes||"No notes"}`,
+        outcome: ci.status==="verified"?"positive":"neutral",
+        next_action: "",
+        value: 0,
+        created_at: ci.checked_in_at,
+        rep_name: ci.rep_name,
+        _fromCheckIn: true,
+      }));
+      // Merge and sort by date
+      const allInteractions = [...(Array.isArray(crmI)?crmI:[]), ...checkInItems]
+        .sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+      setInteractions(allInteractions);
       setContacts(Array.isArray(c)?c:[]);
       setDeals(Array.isArray(d)?d:[]);
+      // Show follow-up if exists
+      if (followup?.[0]?.value) {
+        try {
+          const fu = JSON.parse(followup[0].value);
+          if (fu.date && new Date(fu.date) >= new Date()) {
+            setInteractions(prev=>[{
+              id:"followup",
+              type:"note",
+              summary:`📅 Follow-up reminder: ${fu.note||"No note"} · Due ${new Date(fu.date).toLocaleDateString("en-US",{month:"short",day:"numeric"})}`,
+              outcome:"neutral",
+              created_at: fu.createdAt||new Date().toISOString(),
+              _isReminder:true,
+            },...prev]);
+          }
+        } catch {}
+      }
       setLoading(false);
-    });
+    }).catch(()=>setLoading(false));
   }, [company]);
 
   const saveInteraction = async (form) => {
@@ -4537,7 +4574,7 @@ function CRM() {
       setIsManager(mgr);
 
       const suffix = mgr ? "" : `?user_id=eq.${uid}`;
-      const [d, c, i, co] = await Promise.all([
+      const [d, c, i, checkInData, co] = await Promise.all([
         fetch(`${SUPABASE_URL}/rest/v1/crm_deals${suffix}&order=updated_at.desc&limit=200`, {
           headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`}
         }).then(r=>r.json()),
@@ -4547,13 +4584,34 @@ function CRM() {
         fetch(`${SUPABASE_URL}/rest/v1/crm_interactions${suffix}&order=created_at.desc&limit=500`, {
           headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`}
         }).then(r=>r.json()),
+        // Also load check-ins to merge into activity
+        fetch(`${SUPABASE_URL}/rest/v1/check_ins?user_id=eq.${uid}&order=checked_in_at.desc&limit=200`, {
+          headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`}
+        }).then(r=>r.json()),
         fetch(`${SUPABASE_URL}/rest/v1/companies?user_id=eq.${uid}&select=id,name,town,day&order=name.asc&limit=500`, {
           headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${token}`}
         }).then(r=>r.json()),
       ]);
       setDeals(Array.isArray(d)?d:[]);
       setContacts(Array.isArray(c)?c:[]);
-      setInteractions(Array.isArray(i)?i:[]);
+      // Merge CRM interactions with check-ins
+      const checkInInteractions = (Array.isArray(checkInData)?checkInData:[]).map(ci=>({
+        id:`ci_${ci.id}`,
+        user_id:ci.user_id,
+        rep_name:ci.rep_name,
+        company_id:ci.company_id,
+        company_name:ci.company_name,
+        type:"visit",
+        summary:`GPS Check-In at ${ci.company_name}${ci.status==="verified"?" ✓ Verified":ci.status==="out_of_range"?" ⚠ Far from site":""} · ${ci.notes||"No notes"}`,
+        outcome:ci.status==="verified"?"positive":"neutral",
+        next_action:"",
+        value:0,
+        created_at:ci.checked_in_at,
+        _fromCheckIn:true,
+      }));
+      const merged = [...(Array.isArray(i)?i:[]),...checkInInteractions]
+        .sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+      setInteractions(merged);
       setCompanies(Array.isArray(co)?co:[]);
     } catch(e) { console.error(e); }
     setLoading(false);
